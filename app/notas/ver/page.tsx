@@ -19,6 +19,8 @@ type NoteDetail = {
   display_name: string;
   note_date: string;
   currency_mode: string;
+  exchange_rate: number | null;
+  exchange_gap_percent: number | null;
   subtotal: number;
   discount: number;
   total: number;
@@ -60,6 +62,14 @@ function VerNotaInner() {
 
   if (error) return <p className="text-red-500 text-sm p-8">{error}</p>;
   if (!note) return <p className="text-sm text-gray-400 p-8">Cargando...</p>;
+
+  const isForeignCurrency = note.currency_mode !== "USD";
+  const currencyLabel = note.currency_mode === "COP" ? "COP" : "Bs";
+  const effectiveRate =
+    note.currency_mode === "BS_BCV"
+      ? (note.exchange_rate ?? 0) * (1 + (note.exchange_gap_percent ?? 0) / 100)
+      : note.exchange_rate ?? 0;
+  const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
   return (
     <div className="max-w-2xl mx-auto p-8">
@@ -118,7 +128,9 @@ function VerNotaInner() {
               <th className="font-normal py-2">Producto</th>
               <th className="font-normal py-2 w-16">Cant.</th>
               <th className="font-normal py-2 w-20">Precio</th>
-              <th className="font-normal py-2 w-20 text-right">Total</th>
+              <th className="font-normal py-2 w-24 text-right">
+                Total {isForeignCurrency ? `(${currencyLabel})` : ""}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -127,27 +139,57 @@ function VerNotaInner() {
                 <td className="py-2 text-gray-400 text-xs">{it.code_snapshot}</td>
                 <td className="py-2">{it.description_snapshot}</td>
                 <td className="py-2">{it.quantity}</td>
-                <td className="py-2">${it.unit_price.toFixed(2)}</td>
-                <td className="py-2 text-right">${it.line_total.toFixed(2)}</td>
+                <td className="py-2">
+                  {isForeignCurrency
+                    ? fmt(it.unit_price * effectiveRate)
+                    : `$${it.unit_price.toFixed(2)}`}
+                </td>
+                <td className="py-2 text-right">
+                  {isForeignCurrency
+                    ? fmt(it.line_total * effectiveRate)
+                    : `$${it.line_total.toFixed(2)}`}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
 
         <div className="flex justify-end">
-          <div className="w-60 text-sm">
-            <div className="flex justify-between text-gray-500 py-1">
-              <span>Subtotal</span>
-              <span>${note.subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-gray-500 py-1">
-              <span>Descuento</span>
-              <span>-${note.discount.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between font-medium text-base border-t border-gray-200 mt-1 pt-2">
-              <span>Total</span>
-              <span>${note.total.toFixed(2)}</span>
-            </div>
+          <div className="w-64 text-sm">
+            {isForeignCurrency ? (
+              <>
+                <div className="flex justify-between text-gray-500 py-1">
+                  <span>Subtotal ({currencyLabel})</span>
+                  <span>{fmt(note.subtotal * effectiveRate)}</span>
+                </div>
+                <div className="flex justify-between text-gray-500 py-1">
+                  <span>Descuento ({currencyLabel})</span>
+                  <span>-{fmt(note.discount * effectiveRate)}</span>
+                </div>
+                <div className="flex justify-between font-medium text-base border-t border-gray-200 mt-1 pt-2">
+                  <span>Total ({currencyLabel})</span>
+                  <span>{fmt(note.total * effectiveRate)}</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-2 text-right">
+                  Equivalente: ${note.total.toFixed(2)} USD
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between text-gray-500 py-1">
+                  <span>Subtotal</span>
+                  <span>${note.subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-gray-500 py-1">
+                  <span>Descuento</span>
+                  <span>-${note.discount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-medium text-base border-t border-gray-200 mt-1 pt-2">
+                  <span>Total</span>
+                  <span>${note.total.toFixed(2)}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
