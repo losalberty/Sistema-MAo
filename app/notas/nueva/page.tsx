@@ -136,8 +136,12 @@ function NuevaNotaInner() {
 
   const effectiveRate =
     currencyMode === "BS_BCV" ? exchangeRate * (1 + gapPercent / 100) : exchangeRate;
-  const totalInCurrency =
-    currencyMode === "USD" ? total : currencyMode === "COP" ? total : total * effectiveRate;
+  const isForeignCurrency = currencyMode !== "USD";
+  const currencyLabel =
+    currencyMode === "COP" ? "COP" : currencyMode === "USD" ? "USD" : "Bs";
+  const subtotalInCurrency = subtotal * effectiveRate;
+  const discountInCurrency = discountAmount * effectiveRate;
+  const totalInCurrency = total * effectiveRate;
 
   async function searchProducts(text: string) {
     setQuery(text);
@@ -440,8 +444,11 @@ function NuevaNotaInner() {
             <th className="font-normal py-1 w-24">Codigo</th>
             <th className="font-normal py-1">Producto</th>
             <th className="font-normal py-1 w-16">Cant.</th>
-            <th className="font-normal py-1 w-20">Precio</th>
-            <th className="font-normal py-1 w-20 text-right">Total</th>
+            <th className="font-normal py-1 w-20">Precio (USD)</th>
+            <th className="font-normal py-1 w-20 text-right">Total (USD)</th>
+            {isForeignCurrency && (
+              <th className="font-normal py-1 w-24 text-right">Total ({currencyLabel})</th>
+            )}
             <th className="w-6"></th>
           </tr>
         </thead>
@@ -467,6 +474,13 @@ function NuevaNotaInner() {
                 />
               </td>
               <td className="py-2 text-right">${it.line_total.toFixed(2)}</td>
+              {isForeignCurrency && (
+                <td className="py-2 text-right text-gray-700">
+                  {(it.line_total * effectiveRate).toLocaleString(undefined, {
+                    maximumFractionDigits: 2,
+                  })}
+                </td>
+              )}
               <td className="py-2 text-right">
                 <button onClick={() => removeItem(index)} className="text-gray-400 hover:text-red-500">
                   x
@@ -491,11 +505,11 @@ function NuevaNotaInner() {
           <option value="BS_BCV">Bolivares - tasa BCV (con ajuste de brecha)</option>
         </select>
 
-        {(currencyMode === "BS_BINANCE" || currencyMode === "BS_BCV") && (
+        {isForeignCurrency && (
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="text-xs text-gray-500 block mb-1">
-                Tasa {currencyMode === "BS_BCV" ? "BCV" : "Binance"} (Bs por USD)
+                Tasa del dia ({currencyLabel} por USD)
               </label>
               <input
                 type="number"
@@ -517,19 +531,12 @@ function NuevaNotaInner() {
             )}
           </div>
         )}
-
-        {currencyMode !== "USD" && (
-          <p className="text-xs text-gray-500 mt-2">
-            Equivalente: {totalInCurrency.toFixed(2)}{" "}
-            {currencyMode === "COP" ? "COP" : "Bs"} (solo referencia, no queda fijado en la nota)
-          </p>
-        )}
       </div>
 
       <div className="flex justify-end mb-6">
-        <div className="w-60 text-sm">
+        <div className="w-72 text-sm">
           <div className="flex justify-between text-gray-500 py-1">
-            <span>Subtotal</span>
+            <span>Subtotal (USD)</span>
             <span>${subtotal.toFixed(2)}</span>
           </div>
           <div className="flex justify-between items-center py-1">
@@ -546,9 +553,26 @@ function NuevaNotaInner() {
             <span>-${discountAmount.toFixed(2)}</span>
           </div>
           <div className="flex justify-between font-medium text-base border-t border-gray-200 mt-1 pt-2">
-            <span>Total</span>
+            <span>Total (USD)</span>
             <span>${total.toFixed(2)}</span>
           </div>
+
+          {isForeignCurrency && (
+            <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
+              <div className="flex justify-between text-gray-500 py-1">
+                <span>Subtotal ({currencyLabel})</span>
+                <span>{subtotalInCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between text-gray-500 py-1">
+                <span>Descuento ({currencyLabel})</span>
+                <span>-{discountInCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between font-medium text-base pt-1">
+                <span>Total ({currencyLabel})</span>
+                <span>{totalInCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
