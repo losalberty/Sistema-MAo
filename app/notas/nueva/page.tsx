@@ -210,7 +210,7 @@ function NuevaNotaInner() {
   }
 
   function openNewClientForm() {
-    setClientForm(emptyClientForm);
+    setClientForm({ ...emptyClientForm, name: quickClientName });
     setShowClientForm(true);
   }
 
@@ -269,7 +269,7 @@ function NuevaNotaInner() {
       p_client_id: selectedClient?.id ?? null,
       p_quick_client_name: selectedClient ? null : quickClientName || "Cliente eventual",
       p_currency_mode: currencyMode,
-      p_exchange_rate: currencyMode.startsWith("BS") ? exchangeRate : null,
+      p_exchange_rate: isForeignCurrency ? exchangeRate : null,
       p_exchange_gap_percent: currencyMode === "BS_BCV" ? gapPercent : null,
       p_show_company_name: true,
       p_show_logo: true,
@@ -363,11 +363,18 @@ function NuevaNotaInner() {
               />
               <button
                 onClick={openNewClientForm}
-                className="text-sm border border-gray-300 rounded-md px-3 py-2 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
+                className="text-sm border border-gray-300 rounded-md px-3 py-2 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors whitespace-nowrap"
               >
-                + Nuevo cliente
+                {quickClientName ? "Registrar completo" : "+ Nuevo cliente"}
               </button>
             </div>
+            {quickClientName && (
+              <p className="text-xs text-gray-500 mt-2">
+                Esta nota se guardara a nombre de{" "}
+                <span className="text-gray-900 font-medium">{quickClientName}</span> (sin
+                registrar). Puedes registrarlo completo cuando quieras.
+              </p>
+            )}
           </>
         )}
 
