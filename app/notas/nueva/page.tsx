@@ -24,7 +24,7 @@ type ClientRow = {
 };
 
 type LineItem = {
-  product_id: string;
+  product_id: string | null;
   code_snapshot: string;
   description_snapshot: string;
   quantity: number;
@@ -155,6 +155,45 @@ function NuevaNotaInner() {
       return;
     }
     setResults(data ?? []);
+  }
+
+  async function showAllProducts() {
+    if (results.length > 0) {
+      setResults([]);
+      return;
+    }
+    const { data, error } = await supabase.rpc("list_products", {
+      search_text: "",
+      p_price_list: "",
+    });
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setResults((data ?? []).slice(0, 300));
+  }
+
+  function addManualProduct() {
+    setItems((prev) => [
+      ...prev,
+      {
+        product_id: null,
+        code_snapshot: "",
+        description_snapshot: "",
+        quantity: 1,
+        unit_price: 0,
+        line_discount: 0,
+        line_total: 0,
+      },
+    ]);
+  }
+
+  function updateItemText(
+    index: number,
+    field: "code_snapshot" | "description_snapshot",
+    value: string
+  ) {
+    setItems((prev) => prev.map((it, i) => (i === index ? { ...it, [field]: value } : it)));
   }
 
   function addProduct(p: Product) {
@@ -420,7 +459,23 @@ function NuevaNotaInner() {
 
       {/* Buscar producto */}
       <div className="mb-2 relative">
-        <label className="text-xs text-gray-500 block mb-1">Buscar producto</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-xs text-gray-500">Buscar producto</label>
+          <div className="flex gap-2">
+            <button
+              onClick={showAllProducts}
+              className="text-xs border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
+            >
+              {results.length > 0 ? "Ocultar listado" : "Ver listado completo"}
+            </button>
+            <button
+              onClick={addManualProduct}
+              className="text-xs border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
+            >
+              + Producto manual
+            </button>
+          </div>
+        </div>
         <input
           className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
           placeholder="Codigo o descripcion"
@@ -428,7 +483,7 @@ function NuevaNotaInner() {
           onChange={(e) => searchProducts(e.target.value)}
         />
         {results.length > 0 && (
-          <div className="border border-gray-200 rounded-md mt-1 bg-white shadow-sm">
+          <div className="border border-gray-200 rounded-md mt-1 bg-white shadow-sm max-h-72 overflow-y-auto">
             {results.map((p) => (
               <button
                 key={p.id}
@@ -462,8 +517,30 @@ function NuevaNotaInner() {
         <tbody>
           {items.map((it, index) => (
             <tr key={index} className="border-t border-gray-100">
-              <td className="py-2 text-gray-400 text-xs">{it.code_snapshot}</td>
-              <td className="py-2">{it.description_snapshot}</td>
+              <td className="py-2 text-gray-400 text-xs">
+                {it.product_id ? (
+                  it.code_snapshot
+                ) : (
+                  <input
+                    className="w-20 border border-gray-200 rounded px-2 py-1 text-xs"
+                    placeholder="Codigo"
+                    value={it.code_snapshot}
+                    onChange={(e) => updateItemText(index, "code_snapshot", e.target.value)}
+                  />
+                )}
+              </td>
+              <td className="py-2">
+                {it.product_id ? (
+                  it.description_snapshot
+                ) : (
+                  <input
+                    className="w-full border border-gray-200 rounded px-2 py-1"
+                    placeholder="Descripcion del producto"
+                    value={it.description_snapshot}
+                    onChange={(e) => updateItemText(index, "description_snapshot", e.target.value)}
+                  />
+                )}
+              </td>
               <td className="py-2">
                 <input
                   type="number"
