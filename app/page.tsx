@@ -6,8 +6,8 @@ import { supabase } from "@/lib/supabase";
 const navItems = [
   { label: "Panel", icon: "▣", active: true, href: "/" },
   { label: "Notas", icon: "☷", href: "/notas" },
-  { label: "Clientes", icon: "▤", href: null },
-  { label: "Productos", icon: "▦", href: null },
+  { label: "Clientes", icon: "▤", href: "/clientes" },
+  { label: "Productos", icon: "▦", href: "/productos" },
   { label: "Configuracion", icon: "⚙", href: null },
 ];
 
