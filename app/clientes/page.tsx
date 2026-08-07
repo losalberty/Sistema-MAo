@@ -14,6 +14,8 @@ type ClientRow = {
   city: string | null;
   state: string | null;
   salesperson: string | null;
+  price_tier: number | null;
+  balance_due: number | null;
   created_at: string;
 };
 
@@ -25,6 +27,7 @@ const emptyForm = {
   city: "",
   state: "",
   salesperson: "",
+  price_tier: "1",
 };
 
 const FIELDS: [keyof typeof emptyForm, string][] = [
@@ -78,6 +81,7 @@ export default function ClientesPage() {
       city: c.city ?? "",
       state: c.state ?? "",
       salesperson: c.salesperson ?? "",
+      price_tier: String(c.price_tier ?? 1),
     });
     setEditing(c);
     setCreating(false);
@@ -111,6 +115,7 @@ export default function ClientesPage() {
       p_city: f.city,
       p_state: f.state,
       p_salesperson: f.salesperson,
+      p_price_tier: Number(f.price_tier) || 1,
     };
   }
 
@@ -217,6 +222,16 @@ export default function ClientesPage() {
                 onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
               />
             ))}
+            <select
+              className="border border-gray-200 rounded-md px-3 py-2 text-sm"
+              value={form.price_tier}
+              onChange={(e) => setForm((f) => ({ ...f, price_tier: e.target.value }))}
+            >
+              <option value="1">Tarifa 1 (contado)</option>
+              <option value="2">Tarifa 2 (credito)</option>
+              <option value="3">Tarifa 3</option>
+              <option value="4">Tarifa 4</option>
+            </select>
           </div>
           <div className="flex justify-end gap-2 mt-3">
             <button
@@ -277,6 +292,8 @@ export default function ClientesPage() {
             <tr className="text-xs text-gray-400 text-left bg-gray-50">
               <th className="font-normal px-3 py-2 w-16">N</th>
               <th className="font-normal px-3 py-2">Cliente</th>
+              <th className="font-normal px-3 py-2 w-16">Tarifa</th>
+              <th className="font-normal px-3 py-2 w-28 text-right">Saldo</th>
               <th className="font-normal px-3 py-2 w-32">Telefono</th>
               <th className="font-normal px-3 py-2 w-28">Ciudad</th>
               <th className="font-normal px-3 py-2 w-28">Registrado</th>
@@ -290,6 +307,18 @@ export default function ClientesPage() {
                 <td className="px-3 py-2">
                   {c.name}
                   {c.tax_id && <span className="text-gray-400 text-xs ml-2">{c.tax_id}</span>}
+                </td>
+                <td className="px-3 py-2">
+                  <span className="text-xs bg-gray-100 rounded px-1.5 py-0.5">
+                    T{c.price_tier ?? 1}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {Number(c.balance_due) > 0 ? (
+                    <span className="text-amber-700">${Number(c.balance_due).toFixed(2)}</span>
+                  ) : (
+                    <span className="text-gray-300">-</span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-gray-600">{c.phone || "-"}</td>
                 <td className="px-3 py-2 text-gray-600">{c.city || "-"}</td>
