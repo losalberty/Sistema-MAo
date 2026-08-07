@@ -17,6 +17,7 @@ type ProductRow = {
   has_stock_control: boolean;
   stock_quantity: number | null;
   price_list: string | null;
+  cost: number | null;
 };
 
 type PriceList = { price_list: string; total: number };
@@ -30,6 +31,7 @@ const emptyForm = {
   price_2: "",
   price_3: "",
   price_4: "",
+  cost: "0",
   price_list: "Lista principal",
 };
 
@@ -93,6 +95,7 @@ export default function ProductosPage() {
       price_2: p.price_2 != null ? String(p.price_2) : "",
       price_3: p.price_3 != null ? String(p.price_3) : "",
       price_4: p.price_4 != null ? String(p.price_4) : "",
+      cost: p.cost != null ? String(p.cost) : "0",
       price_list: p.price_list ?? "Lista principal",
     });
     setEditing(p);
@@ -115,6 +118,7 @@ export default function ProductosPage() {
       p_has_stock_control: true,
       p_stock_quantity: 0,
       p_price_list: form.price_list || "Lista principal",
+      p_cost: Number(form.cost) || 0,
     });
     setSaving(false);
     if (error) {
@@ -355,6 +359,7 @@ export default function ProductosPage() {
                 ["brand", "Marca"],
                 ["category", "Grupo / categoria"],
                 ["price_list", "Lista de precios"],
+                ["cost", "Costo"],
                 ["price_1", "Precio 1 (contado)"],
                 ["price_2", "Precio 2 (credito)"],
                 ["price_3", "Precio 3"],
@@ -400,7 +405,9 @@ export default function ProductosPage() {
               <th className="font-normal px-3 py-2">Descripcion</th>
               <th className="font-normal px-3 py-2 w-24">Marca</th>
               <th className="font-normal px-3 py-2 w-40">Grupo</th>
-              <th className="font-normal px-3 py-2 w-20 text-right">Precio</th>
+              <th className="font-normal px-3 py-2 w-20 text-right">Costo</th>
+              <th className="font-normal px-3 py-2 w-20 text-right">P1</th>
+              <th className="font-normal px-3 py-2 w-20 text-right">P2</th>
               <th className="font-normal px-3 py-2 w-28 text-right">Acciones</th>
             </tr>
           </thead>
@@ -411,7 +418,13 @@ export default function ProductosPage() {
                 <td className="px-3 py-2">{p.description}</td>
                 <td className="px-3 py-2 text-gray-600 text-xs">{p.brand || "-"}</td>
                 <td className="px-3 py-2 text-gray-500 text-xs">{p.category || "-"}</td>
+                <td className="px-3 py-2 text-right text-gray-500">
+                  {p.cost ? `$${Number(p.cost).toFixed(2)}` : "-"}
+                </td>
                 <td className="px-3 py-2 text-right">${Number(p.price_1).toFixed(2)}</td>
+                <td className="px-3 py-2 text-right text-gray-500">
+                  {p.price_2 != null ? `$${Number(p.price_2).toFixed(2)}` : "-"}
+                </td>
                 <td className="px-3 py-2 text-right">
                   <button onClick={() => startEdit(p)} className="text-xs text-gray-500 hover:text-gray-900 mr-2">
                     Editar
