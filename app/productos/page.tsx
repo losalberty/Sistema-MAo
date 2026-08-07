@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -21,6 +21,23 @@ type ProductRow = {
 };
 
 type PriceList = { price_list: string; total: number };
+
+type ParsedItem = {
+  code: string;
+  description: string;
+  brand: string;
+  category: string;
+  price_1: string;
+  price_2: string;
+};
+
+type Preview = {
+  file_total: number;
+  matched: number;
+  new: number;
+  existing_total: number;
+  untouched: number;
+};
 
 const emptyForm = {
   code: "",
@@ -49,10 +66,18 @@ export default function ProductosPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
 
-  // importacion CSV
+  // seleccion multiple
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [working, setWorking] = useState(false);
+
+  // importacion
   const [showImport, setShowImport] = useState(false);
   const [importListName, setImportListName] = useState("");
-  const [replaceExisting, setReplaceExisting] = useState(false);
+  const [importMode, setImportMode] = useState<"update" | "replace">("update");
+  const [onlyExisting, setOnlyExisting] = useState(false);
+  const [fileName, setFileName] = useState("");
+  const [parsed, setParsed] = useState<ParsedItem[]>([]);
+  const [preview, setPreview] = useState<Preview | null>(null);
   const [importing, setImporting] = useState(false);
 
   useEffect(() => {
@@ -72,12 +97,67 @@ export default function ProductosPage() {
       return;
     }
     setProducts(data ?? []);
+    setSelected(new Set());
   }
 
   async function loadLists() {
     const { data } = await supabase.rpc("list_price_lists");
     setPriceLists(data ?? []);
   }
+
+  // ---------- seleccion ----------
+
+  const allSelected = products.length > 0 && selected.size === products.length;
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(products.map((p) => p.id)));
+  }
+
+  async function deleteSelected() {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    if (!confirm(`¿Eliminar ${ids.length} producto(s)? Esta accion no se puede deshacer.`)) return;
+    setWorking(true);
+    setError(null);
+    const { data, error } = await supabase.rpc("delete_products", { p_ids: ids });
+    setWorking(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setInfo(`${data} producto(s) eliminado(s).`);
+    load();
+    loadLists();
+  }
+
+  async function deleteEverything() {
+    const answer = prompt(
+      `Esto borra los ${products.length} productos visibles y TODA la lista completa.\n\nEscribe BORRAR para confirmar:`
+    );
+    if (answer !== "BORRAR") return;
+    setWorking(true);
+    setError(null);
+    const { data, error } = await supabase.rpc("delete_all_products");
+    setWorking(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setInfo(`${data} productos eliminados. La lista quedo vacia.`);
+    load();
+    loadLists();
+  }
+
+  // ---------- ficha ----------
 
   function startCreate() {
     setForm(emptyForm);
@@ -142,20 +222,9 @@ export default function ProductosPage() {
     loadLists();
   }
 
-  async function removeList(name: string) {
-    if (!confirm(`¿Eliminar TODOS los productos de la lista "${name}"? No se puede deshacer.`))
-      return;
-    const { error } = await supabase.rpc("delete_price_list", { p_price_list: name });
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setInfo(`Lista "${name}" eliminada.`);
-    load();
-    loadLists();
-  }
+  // ---------- importacion ----------
 
-  function parseCsv(text: string) {
+  function parseCsv(text: string): ParsedItem[] {
     const lines = text.split(/\r?\n/).filter((l) => l.trim());
     if (lines.length < 2) return [];
     const split = (line: string) => {
@@ -169,7 +238,7 @@ export default function ProductosPage() {
             cur += '"';
             i++;
           } else inQuotes = !inQuotes;
-        } else if (ch === "," && !inQuotes) {
+        } else if ((ch === "," || ch === ";") && !inQuotes) {
           out.push(cur);
           cur = "";
         } else cur += ch;
@@ -178,58 +247,91 @@ export default function ProductosPage() {
       return out;
     };
     const headers = split(lines[0]).map((h) => h.trim().toLowerCase());
-    return lines.slice(1).map((line) => {
-      const cells = split(line);
-      const row: Record<string, string> = {};
-      headers.forEach((h, i) => (row[h] = (cells[i] ?? "").trim()));
-      return {
-        code: row["code"] ?? row["codigo"] ?? row["código"] ?? "",
-        description: row["description"] ?? row["descripcion"] ?? row["descripción"] ?? "",
-        brand: row["brand"] ?? row["marca"] ?? "",
-        category: row["category"] ?? row["categoria"] ?? row["grupo"] ?? "",
-        price_1: row["price_1"] ?? row["precio"] ?? row["contado"] ?? "0",
-        price_2: row["price_2"] ?? row["credito"] ?? row["crédito"] ?? "",
-      };
-    }).filter((r) => r.code && r.description);
+    return lines
+      .slice(1)
+      .map((line) => {
+        const cells = split(line);
+        const row: Record<string, string> = {};
+        headers.forEach((h, i) => (row[h] = (cells[i] ?? "").trim()));
+        return {
+          code: row["code"] ?? row["codigo"] ?? row["código"] ?? "",
+          description: row["description"] ?? row["descripcion"] ?? row["descripción"] ?? "",
+          brand: row["brand"] ?? row["marca"] ?? "",
+          category: row["category"] ?? row["categoria"] ?? row["grupo"] ?? "",
+          price_1: row["price_1"] ?? row["precio"] ?? row["contado"] ?? "",
+          price_2: row["price_2"] ?? row["credito"] ?? row["crédito"] ?? "",
+        };
+      })
+      .filter((r) => r.code.trim());
+  }
+
+  function resetImport() {
+    setFileName("");
+    setParsed([]);
+    setPreview(null);
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!importListName.trim()) {
-      setError("Ponle un nombre a la lista antes de subir el archivo.");
-      return;
-    }
-    setImporting(true);
     setError(null);
     setInfo(null);
     const text = await file.text();
     const items = parseCsv(text);
+    e.target.value = "";
     if (items.length === 0) {
-      setImporting(false);
-      setError("No se encontraron productos validos en el archivo.");
+      resetImport();
+      setError("No se encontraron productos validos en el archivo. Revisa que tenga una fila de encabezados con al menos la columna codigo.");
       return;
     }
-    const { data, error } = await supabase.rpc("import_products", {
-      p_price_list: importListName.trim(),
-      p_replace: replaceExisting,
-      p_items: items,
+    setFileName(file.name);
+    setParsed(items);
+    const { data, error } = await supabase.rpc("preview_import", {
+      p_codes: items.map((i) => i.code),
     });
-    setImporting(false);
-    e.target.value = "";
     if (error) {
       setError(error.message);
       return;
     }
-    setInfo(`${data} productos cargados en la lista "${importListName.trim()}".`);
+    setPreview(data as Preview);
+  }
+
+  async function confirmImport() {
+    if (parsed.length === 0) return;
+    setImporting(true);
+    setError(null);
+    const { data, error } = await supabase.rpc("import_products_v2", {
+      p_mode: importMode,
+      p_only_existing: importMode === "update" && onlyExisting,
+      p_price_list: importListName.trim(),
+      p_items: parsed,
+    });
+    setImporting(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    const r = data as { updated: number; created: number; skipped: number; deleted: number };
+    setInfo(
+      `Listo. ${r.updated} actualizados, ${r.created} creados` +
+        (r.skipped ? `, ${r.skipped} omitidos` : "") +
+        (r.deleted ? `, ${r.deleted} borrados antes de cargar` : "") +
+        "."
+    );
     setShowImport(false);
+    resetImport();
     setImportListName("");
     load();
     loadLists();
   }
 
+  const willDelete = useMemo(
+    () => (importMode === "replace" ? preview?.existing_total ?? 0 : 0),
+    [importMode, preview]
+  );
+
   return (
-    <main className="max-w-5xl mx-auto p-8">
+    <main className="max-w-5xl mx-auto p-8 pb-24">
       <div className="flex items-start justify-between mb-6">
         <div>
           <Link href="/" className="text-sm text-gray-500 hover:text-gray-900 inline-block mb-2">
@@ -240,10 +342,13 @@ export default function ProductosPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowImport((s) => !s)}
+            onClick={() => {
+              setShowImport((s) => !s);
+              resetImport();
+            }}
             className="text-sm border border-gray-300 rounded-md px-3 py-2 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
           >
-            Subir lista CSV
+            Importar
           </button>
           <button
             onClick={startCreate}
@@ -256,37 +361,119 @@ export default function ProductosPage() {
 
       {showImport && (
         <div className="border border-gray-200 rounded-lg p-4 mb-6">
-          <p className="text-sm font-medium mb-2">Cargar lista de precios desde CSV</p>
-          <p className="text-xs text-gray-500 mb-3">
-            El archivo debe tener columnas: code, description, brand, category, price_1, price_2.
+          <p className="text-sm font-medium mb-1">Importar lista desde archivo</p>
+          <p className="text-xs text-gray-500 mb-4">
+            Columnas reconocidas: codigo, descripcion, marca, grupo, contado, credito. El
+            emparejamiento es por codigo, no por nombre.
           </p>
-          <div className="flex gap-2 items-end flex-wrap">
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-xs text-gray-500 block mb-1">Nombre de la lista</label>
+
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Como aplicar</label>
+              <div className="flex flex-col gap-2">
+                <label className="flex items-start gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    className="mt-1"
+                    checked={importMode === "update"}
+                    onChange={() => setImportMode("update")}
+                  />
+                  <span>
+                    Actualizar
+                    <span className="block text-xs text-gray-500">
+                      Cambia los que coincidan y agrega los nuevos. No borra nada.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    className="mt-1"
+                    checked={importMode === "replace"}
+                    onChange={() => setImportMode("replace")}
+                  />
+                  <span>
+                    Reemplazar todo
+                    <span className="block text-xs text-gray-500">
+                      Borra la lista actual y deja solo este archivo.
+                    </span>
+                  </span>
+                </label>
+              </div>
+              {importMode === "update" && (
+                <label className="flex items-center gap-2 text-xs text-gray-600 mt-3">
+                  <input
+                    type="checkbox"
+                    checked={onlyExisting}
+                    onChange={(e) => setOnlyExisting(e.target.checked)}
+                  />
+                  No crear productos nuevos
+                </label>
+              )}
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">
+                Nombre de la lista <span className="text-gray-400">(opcional)</span>
+              </label>
               <input
-                className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm mb-3"
                 placeholder="Ej: Lista Agosto 2026"
                 value={importListName}
                 onChange={(e) => setImportListName(e.target.value)}
               />
+              <label className="text-xs text-gray-500 block mb-1">Archivo CSV</label>
+              <input type="file" accept=".csv,.txt" onChange={handleFile} className="text-sm" />
             </div>
-            <label className="flex items-center gap-2 text-sm text-gray-600 pb-2">
-              <input
-                type="checkbox"
-                checked={replaceExisting}
-                onChange={(e) => setReplaceExisting(e.target.checked)}
-              />
-              Reemplazar si ya existe
-            </label>
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleFile}
-              disabled={importing}
-              className="text-sm"
-            />
           </div>
-          {importing && <p className="text-xs text-gray-500 mt-2">Cargando productos...</p>}
+
+          {preview && (
+            <div className="border border-gray-200 rounded-md p-3 bg-gray-50">
+              <p className="text-xs text-gray-500 mb-2">
+                {fileName} · {preview.file_total} codigos leidos
+              </p>
+              <div className="grid grid-cols-4 gap-3 text-center mb-3">
+                <div>
+                  <p className="text-lg">{preview.matched}</p>
+                  <p className="text-xs text-gray-500">se actualizan</p>
+                </div>
+                <div>
+                  <p className="text-lg">{importMode === "update" && onlyExisting ? 0 : preview.new}</p>
+                  <p className="text-xs text-gray-500">se crean</p>
+                </div>
+                <div>
+                  <p className="text-lg text-gray-400">
+                    {importMode === "replace" ? 0 : preview.untouched}
+                  </p>
+                  <p className="text-xs text-gray-500">quedan igual</p>
+                </div>
+                <div>
+                  <p className={`text-lg ${willDelete ? "text-red-500" : "text-gray-400"}`}>
+                    {willDelete}
+                  </p>
+                  <p className="text-xs text-gray-500">se borran</p>
+                </div>
+              </div>
+              {importMode === "replace" && (
+                <p className="text-xs text-red-600 mb-3">
+                  Ojo: se borran los {preview.existing_total} productos actuales antes de cargar el
+                  archivo. Las notas ya guardadas conservan sus codigos y descripciones.
+                </p>
+              )}
+              <div className="flex justify-end gap-2">
+                <button onClick={resetImport} className="text-sm text-gray-500 px-3 py-1.5">
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmImport}
+                  disabled={importing}
+                  className="text-sm bg-gray-900 text-white rounded-md px-4 py-1.5 disabled:opacity-40"
+                >
+                  {importing ? "Importando..." : "Confirmar importacion"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -306,28 +493,20 @@ export default function ProductosPage() {
             Todas ({priceLists.reduce((s, l) => s + Number(l.total), 0)})
           </button>
           {priceLists.map((l) => (
-            <span key={l.price_list} className="inline-flex items-center">
-              <button
-                onClick={() => {
-                  setListFilter(l.price_list);
-                  load(search, l.price_list);
-                }}
-                className={`text-xs rounded-full px-3 py-1 border transition-colors ${
-                  listFilter === l.price_list
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "border-gray-300 text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                {l.price_list} ({l.total})
-              </button>
-              <button
-                onClick={() => removeList(l.price_list)}
-                title="Eliminar esta lista"
-                className="text-xs text-gray-300 hover:text-red-500 ml-1"
-              >
-                x
-              </button>
-            </span>
+            <button
+              key={l.price_list}
+              onClick={() => {
+                setListFilter(l.price_list);
+                load(search, l.price_list);
+              }}
+              className={`text-xs rounded-full px-3 py-1 border transition-colors ${
+                listFilter === l.price_list
+                  ? "bg-gray-900 text-white border-gray-900"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {l.price_list} ({l.total})
+            </button>
           ))}
         </div>
       )}
@@ -401,6 +580,14 @@ export default function ProductosPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-gray-400 text-left bg-gray-50">
+              <th className="font-normal px-3 py-2 w-8">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  aria-label="Seleccionar todo"
+                />
+              </th>
               <th className="font-normal px-3 py-2 w-28">Codigo</th>
               <th className="font-normal px-3 py-2">Descripcion</th>
               <th className="font-normal px-3 py-2 w-24">Marca</th>
@@ -412,35 +599,89 @@ export default function ProductosPage() {
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => (
-              <tr key={p.id} className="border-t border-gray-100 hover:bg-gray-50 transition-colors">
-                <td className="px-3 py-2 text-gray-400 text-xs">{p.code}</td>
-                <td className="px-3 py-2">{p.description}</td>
-                <td className="px-3 py-2 text-gray-600 text-xs">{p.brand || "-"}</td>
-                <td className="px-3 py-2 text-gray-500 text-xs">{p.category || "-"}</td>
-                <td className="px-3 py-2 text-right text-gray-500">
-                  {p.cost ? `$${Number(p.cost).toFixed(2)}` : "-"}
-                </td>
-                <td className="px-3 py-2 text-right">${Number(p.price_1).toFixed(2)}</td>
-                <td className="px-3 py-2 text-right text-gray-500">
-                  {p.price_2 != null ? `$${Number(p.price_2).toFixed(2)}` : "-"}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <button onClick={() => startEdit(p)} className="text-xs text-gray-500 hover:text-gray-900 mr-2">
-                    Editar
-                  </button>
-                  <button onClick={() => remove(p)} className="text-xs text-gray-400 hover:text-red-500">
-                    Eliminar
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {products.map((p) => {
+              const isSel = selected.has(p.id);
+              return (
+                <tr
+                  key={p.id}
+                  className={`border-t border-gray-100 transition-colors ${
+                    isSel ? "bg-gray-100" : "hover:bg-gray-50"
+                  }`}
+                >
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={isSel}
+                      onChange={() => toggleOne(p.id)}
+                      aria-label={`Seleccionar ${p.code}`}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-gray-400 text-xs">{p.code}</td>
+                  <td className="px-3 py-2">{p.description}</td>
+                  <td className="px-3 py-2 text-gray-600 text-xs">{p.brand || "-"}</td>
+                  <td className="px-3 py-2 text-gray-500 text-xs">{p.category || "-"}</td>
+                  <td className="px-3 py-2 text-right text-gray-500">
+                    {p.cost ? `$${Number(p.cost).toFixed(2)}` : "-"}
+                  </td>
+                  <td className="px-3 py-2 text-right">${Number(p.price_1).toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right text-gray-500">
+                    {p.price_2 != null ? `$${Number(p.price_2).toFixed(2)}` : "-"}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      onClick={() => startEdit(p)}
+                      className="text-xs text-gray-500 hover:text-gray-900 mr-2"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => remove(p)}
+                      className="text-xs text-gray-400 hover:text-red-500"
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {!loading && products.length === 0 && (
         <p className="text-sm text-gray-400 mt-4">No hay productos que coincidan.</p>
+      )}
+
+      {!loading && products.length > 0 && selected.size === 0 && (
+        <div className="mt-4 text-right">
+          <button
+            onClick={deleteEverything}
+            className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+          >
+            Eliminar toda la lista de productos
+          </button>
+        </div>
+      )}
+
+      {selected.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+          <div className="flex items-center gap-5 bg-gray-900 text-white rounded-full pl-5 pr-3 py-2.5 shadow-lg">
+            <span className="text-sm">{selected.size} seleccionados</span>
+            <button
+              onClick={deleteSelected}
+              disabled={working}
+              className="text-sm text-red-300 hover:text-red-200 disabled:opacity-40"
+            >
+              {working ? "Eliminando..." : "Eliminar"}
+            </button>
+            <button
+              onClick={() => setSelected(new Set())}
+              className="text-sm text-gray-400 hover:text-white rounded-full px-2"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
       )}
     </main>
   );
