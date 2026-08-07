@@ -4,16 +4,11 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-
-type Product = {
-  id: string;
-  code: string;
-  description: string;
-  price_1: number;
-};
+import ProductPicker, { PickerProduct } from "@/components/ProductPicker";
 
 type ClientRow = {
   id: string;
+  client_number?: number;
   name: string;
   tax_id: string | null;
   fiscal_address: string | null;
@@ -21,6 +16,8 @@ type ClientRow = {
   city: string | null;
   state: string | null;
   salesperson: string | null;
+  price_tier?: number;
+  balance_due?: number;
 };
 
 type LineItem = {
@@ -31,6 +28,9 @@ type LineItem = {
   unit_price: number;
   line_discount: number;
   line_total: number;
+  cost_snapshot: number;
+  price_tier_used: number | null;
+  prices?: (number | null)[];
 };
 
 type CurrencyMode = "USD" | "COP" | "BS_BINANCE" | "BS_BCV";
@@ -43,18 +43,18 @@ const emptyClientForm = {
   city: "",
   state: "",
   salesperson: "",
+  price_tier: "1",
 };
 
 function NuevaNotaInner() {
   const params = useSearchParams();
   const editId = params.get("id");
 
-  // productos
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Product[]>([]);
+  const [results, setResults] = useState<PickerProduct[]>([]);
+  const [showPicker, setShowPicker] = useState(false);
   const [items, setItems] = useState<LineItem[]>([]);
 
-  // cliente
   const [clientQuery, setClientQuery] = useState("");
   const [clientResults, setClientResults] = useState<ClientRow[]>([]);
   const [selectedClient, setSelectedClient] = useState<ClientRow | null>(null);
@@ -63,19 +63,22 @@ function NuevaNotaInner() {
   const [clientForm, setClientForm] = useState(emptyClientForm);
   const [savingClient, setSavingClient] = useState(false);
 
-  // totales
   const [discountPercent, setDiscountPercent] = useState(0);
-
-  // moneda
   const [currencyMode, setCurrencyMode] = useState<CurrencyMode>("USD");
-  const [exchangeRate, setExchangeRate] = useState<number>(0);
-  const [gapPercent, setGapPercent] = useState<number>(0);
+  const [exchangeRate, setExchangeRate] = useState(0);
+  const [gapPercent, setGapPercent] = useState(0);
+
+  const [paymentStatus, setPaymentStatus] = useState("PENDIENTE");
+  const [dueDate, setDueDate] = useState("");
+  const [showProfit, setShowProfit] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [savedNoteNumber, setSavedNoteNumber] = useState<number | null>(null);
   const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(!!editId);
+
+  const tier = selectedClient?.price_tier ?? 1;
 
   useEffect(() => {
     if (editId) loadForEdit(editId);
@@ -85,29 +88,23 @@ function NuevaNotaInner() {
     setLoadingEdit(true);
     const { data, error } = await supabase.rpc("get_note_detail", { p_note_id: id });
     setLoadingEdit(false);
-    if (error) {
-      setError(error.message);
-      return;
-    }
+    if (error) return setError(error.message);
     const row = Array.isArray(data) ? data[0] : data;
     if (!row) return;
-    setItems(row.items ?? []);
+    setItems(
+      (row.items ?? []).map((i: LineItem) => ({ ...i, cost_snapshot: i.cost_snapshot ?? 0 }))
+    );
     setQuickClientName(row.quick_client_name ?? "");
     if (row.client_id) {
-      setSelectedClient({
-        id: row.client_id,
-        name: row.display_name,
-        tax_id: null,
-        fiscal_address: null,
-        phone: null,
-        city: null,
-        state: null,
-        salesperson: null,
-      });
+      const { data: cs } = await supabase.rpc("list_clients", { search_text: row.display_name });
+      const found = (cs ?? []).find((c: ClientRow) => c.id === row.client_id);
+      setSelectedClient(found ?? null);
     }
     setCurrencyMode((row.currency_mode as CurrencyMode) ?? "USD");
     setExchangeRate(row.exchange_rate ?? 0);
     setGapPercent(row.exchange_gap_percent ?? 0);
+    setPaymentStatus(row.payment_status ?? "PENDIENTE");
+    setDueDate(row.due_date ?? "");
     const sub = row.subtotal ?? 0;
     setDiscountPercent(sub > 0 ? Math.round(((row.discount ?? 0) / sub) * 10000) / 100 : 0);
   }
@@ -124,53 +121,59 @@ function NuevaNotaInner() {
     setCurrencyMode("USD");
     setExchangeRate(0);
     setGapPercent(0);
+    setPaymentStatus("PENDIENTE");
+    setDueDate("");
     setSavedNoteNumber(null);
     setSavedNoteId(null);
     setError(null);
     window.history.replaceState({}, "", "/notas/nueva");
   }
 
-  const subtotal = items.reduce((sum, i) => sum + i.line_total, 0);
+  const subtotal = items.reduce((s, i) => s + i.line_total, 0);
   const discountAmount = (subtotal * discountPercent) / 100;
   const total = subtotal - discountAmount;
+  const totalCost = items.reduce((s, i) => s + (i.cost_snapshot || 0) * i.quantity, 0);
+  const profit = total - totalCost;
+  const margin = total > 0 ? (profit / total) * 100 : 0;
 
   const effectiveRate =
     currencyMode === "BS_BCV" ? exchangeRate * (1 + gapPercent / 100) : exchangeRate;
-  const isForeignCurrency = currencyMode !== "USD";
-  const currencyLabel =
-    currencyMode === "COP" ? "COP" : currencyMode === "USD" ? "USD" : "Bs";
-  const subtotalInCurrency = subtotal * effectiveRate;
-  const discountInCurrency = discountAmount * effectiveRate;
-  const totalInCurrency = total * effectiveRate;
+  const isForeign = currencyMode !== "USD";
+  const curLabel = currencyMode === "COP" ? "COP" : "Bs";
+  const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+  function priceOf(p: PickerProduct, t: number) {
+    const v = t === 4 ? p.price_4 : t === 3 ? p.price_3 : t === 2 ? p.price_2 : p.price_1;
+    return Number(v ?? p.price_1 ?? 0);
+  }
 
   async function searchProducts(text: string) {
     setQuery(text);
-    if (text.length < 2) {
-      setResults([]);
-      return;
-    }
+    if (text.length < 2) return setResults([]);
     const { data, error } = await supabase.rpc("search_products", { search_text: text });
-    if (error) {
-      setError(error.message);
-      return;
-    }
+    if (error) return setError(error.message);
     setResults(data ?? []);
   }
 
-  async function showAllProducts() {
-    if (results.length > 0) {
-      setResults([]);
-      return;
-    }
-    const { data, error } = await supabase.rpc("list_products", {
-      search_text: "",
-      p_price_list: "",
-    });
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setResults((data ?? []).slice(0, 300));
+  function addProduct(p: PickerProduct, tierUsed: number) {
+    const price = priceOf(p, tierUsed);
+    setItems((prev) => [
+      ...prev,
+      {
+        product_id: p.id,
+        code_snapshot: p.code,
+        description_snapshot: p.description,
+        quantity: 1,
+        unit_price: price,
+        line_discount: 0,
+        line_total: price,
+        cost_snapshot: Number(p.cost ?? 0),
+        price_tier_used: tierUsed,
+        prices: [p.price_1, p.price_2, p.price_3, p.price_4],
+      },
+    ]);
+    setQuery("");
+    setResults([]);
   }
 
   function addManualProduct() {
@@ -184,61 +187,51 @@ function NuevaNotaInner() {
         unit_price: 0,
         line_discount: 0,
         line_total: 0,
+        cost_snapshot: 0,
+        price_tier_used: null,
       },
     ]);
   }
 
-  function updateItemText(
-    index: number,
-    field: "code_snapshot" | "description_snapshot",
-    value: string
-  ) {
-    setItems((prev) => prev.map((it, i) => (i === index ? { ...it, [field]: value } : it)));
+  function recalc(it: LineItem) {
+    return { ...it, line_total: it.quantity * it.unit_price - it.line_discount };
   }
 
-  function addProduct(p: Product) {
-    setItems((prev) => [
-      ...prev,
-      {
-        product_id: p.id,
-        code_snapshot: p.code,
-        description_snapshot: p.description,
-        quantity: 1,
-        unit_price: p.price_1,
-        line_discount: 0,
-        line_total: p.price_1,
-      },
-    ]);
-    setQuery("");
-    setResults([]);
-  }
-
-  function updateItem(index: number, field: "quantity" | "unit_price", value: number) {
+  function updateItem(i: number, field: "quantity" | "unit_price" | "cost_snapshot", v: number) {
     setItems((prev) =>
-      prev.map((it, i) => {
-        if (i !== index) return it;
-        const updated = { ...it, [field]: value };
-        updated.line_total = updated.quantity * updated.unit_price - updated.line_discount;
-        return updated;
+      prev.map((it, idx) => {
+        if (idx !== i) return it;
+        const upd = { ...it, [field]: v };
+        if (field === "unit_price") upd.price_tier_used = null;
+        return recalc(upd);
       })
     );
   }
 
-  function removeItem(index: number) {
-    setItems((prev) => prev.filter((_, i) => i !== index));
+  function setLineTier(i: number, t: number) {
+    setItems((prev) =>
+      prev.map((it, idx) => {
+        if (idx !== i || !it.prices) return it;
+        const v = it.prices[t - 1];
+        if (v == null) return it;
+        return recalc({ ...it, unit_price: Number(v), price_tier_used: t });
+      })
+    );
+  }
+
+  function updateItemText(i: number, field: "code_snapshot" | "description_snapshot", v: string) {
+    setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, [field]: v } : it)));
+  }
+
+  function removeItem(i: number) {
+    setItems((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   async function searchClients(text: string) {
     setClientQuery(text);
-    if (text.length < 2) {
-      setClientResults([]);
-      return;
-    }
+    if (text.length < 2) return setClientResults([]);
     const { data, error } = await supabase.rpc("list_clients", { search_text: text });
-    if (error) {
-      setError(error.message);
-      return;
-    }
+    if (error) return setError(error.message);
     setClientResults(data ?? []);
   }
 
@@ -246,96 +239,80 @@ function NuevaNotaInner() {
     setSelectedClient(c);
     setClientQuery("");
     setClientResults([]);
-  }
-
-  function openNewClientForm() {
-    setClientForm({ ...emptyClientForm, name: quickClientName });
-    setShowClientForm(true);
-  }
-
-  function openEditClientForm() {
-    if (!selectedClient) return;
-    setClientForm({
-      name: selectedClient.name ?? "",
-      tax_id: selectedClient.tax_id ?? "",
-      fiscal_address: selectedClient.fiscal_address ?? "",
-      phone: selectedClient.phone ?? "",
-      city: selectedClient.city ?? "",
-      state: selectedClient.state ?? "",
-      salesperson: selectedClient.salesperson ?? "",
-    });
-    setShowClientForm(true);
+    const t = c.price_tier ?? 1;
+    setItems((prev) =>
+      prev.map((it) => {
+        if (!it.prices) return it;
+        const v = it.prices[t - 1];
+        if (v == null) return it;
+        return recalc({ ...it, unit_price: Number(v), price_tier_used: t });
+      })
+    );
   }
 
   async function saveClient() {
     setSavingClient(true);
     setError(null);
-    const rpcName = selectedClient ? "update_client" : "create_client";
-    const params = selectedClient
-      ? {
-          p_id: selectedClient.id,
-          p_name: clientForm.name,
-          p_tax_id: clientForm.tax_id,
-          p_fiscal_address: clientForm.fiscal_address,
-          p_phone: clientForm.phone,
-          p_city: clientForm.city,
-          p_state: clientForm.state,
-          p_salesperson: clientForm.salesperson,
-        }
-      : {
-          p_name: clientForm.name,
-          p_tax_id: clientForm.tax_id,
-          p_fiscal_address: clientForm.fiscal_address,
-          p_phone: clientForm.phone,
-          p_city: clientForm.city,
-          p_state: clientForm.state,
-          p_salesperson: clientForm.salesperson,
-        };
-    const { data, error } = await supabase.rpc(rpcName, params);
+    const base = {
+      p_name: clientForm.name,
+      p_tax_id: clientForm.tax_id,
+      p_fiscal_address: clientForm.fiscal_address,
+      p_phone: clientForm.phone,
+      p_city: clientForm.city,
+      p_state: clientForm.state,
+      p_salesperson: clientForm.salesperson,
+      p_price_tier: Number(clientForm.price_tier) || 1,
+    };
+    const { data, error } = selectedClient
+      ? await supabase.rpc("update_client", { p_id: selectedClient.id, ...base })
+      : await supabase.rpc("create_client", base);
     setSavingClient(false);
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setSelectedClient(data as ClientRow);
+    if (error) return setError(error.message);
+    selectClient(data as ClientRow);
     setShowClientForm(false);
   }
 
   async function saveNote() {
     setSaving(true);
     setError(null);
-    const basePayload = {
+    const payload = {
       p_client_id: selectedClient?.id ?? null,
       p_quick_client_name: selectedClient ? null : quickClientName || "Cliente eventual",
       p_currency_mode: currencyMode,
-      p_exchange_rate: isForeignCurrency ? exchangeRate : null,
+      p_exchange_rate: isForeign ? exchangeRate : null,
       p_exchange_gap_percent: currencyMode === "BS_BCV" ? gapPercent : null,
       p_show_company_name: true,
       p_show_logo: true,
       p_discount: discountAmount,
-      p_items: items,
+      p_items: items.map(({ prices, ...rest }) => rest),
+      p_payment_status: paymentStatus,
+      p_due_date: dueDate || null,
     };
-
     const { data, error } = editId
-      ? await supabase.rpc("update_note", { p_note_id: editId, ...basePayload })
-      : await supabase.rpc("create_note", basePayload);
-
+      ? await supabase.rpc("update_note", { p_note_id: editId, ...payload })
+      : await supabase.rpc("create_note", payload);
     setSaving(false);
-    if (error) {
-      setError(error.message);
-      return;
-    }
+    if (error) return setError(error.message);
     const row = Array.isArray(data) ? data[0] : data;
     setSavedNoteNumber(row?.sequence_number ?? null);
     setSavedNoteId((row?.id as string) ?? editId ?? null);
   }
 
-  if (loadingEdit) {
-    return <p className="text-sm text-gray-400 p-8">Cargando nota...</p>;
-  }
+  if (loadingEdit) return <p className="text-sm text-gray-400 p-8">Cargando nota...</p>;
 
   return (
-    <main className="max-w-2xl mx-auto p-8">
+    <main className="max-w-3xl mx-auto p-8">
+      {showPicker && (
+        <ProductPicker
+          tier={tier}
+          onPick={(p, t) => {
+            addProduct(p, t);
+            setShowPicker(false);
+          }}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
+
       <Link href="/notas" className="text-sm text-gray-500 hover:text-gray-900 inline-block mb-4">
         ← Volver a notas
       </Link>
@@ -344,19 +321,43 @@ function NuevaNotaInner() {
       {/* Cliente */}
       <div className="mb-6 border border-gray-200 rounded-lg p-4">
         <label className="text-xs text-gray-500 block mb-2">Cliente</label>
-
         {selectedClient ? (
-          <div className="flex items-center justify-between bg-gray-50 rounded-md px-3 py-2 text-sm">
+          <div className="flex items-start justify-between bg-gray-50 rounded-md px-3 py-2 text-sm">
             <div>
-              <p className="font-medium">{selectedClient.name}</p>
+              <p className="font-medium">
+                {selectedClient.name}
+                <span className="ml-2 text-xs bg-gray-900 text-white rounded px-1.5 py-0.5">
+                  Tarifa {tier}
+                </span>
+              </p>
               <p className="text-xs text-gray-500">
                 {[selectedClient.tax_id, selectedClient.city, selectedClient.state]
                   .filter(Boolean)
                   .join(" - ")}
               </p>
+              {!!Number(selectedClient.balance_due) && (
+                <p className="text-xs text-amber-700 mt-1">
+                  Pendiente de cobro: ${Number(selectedClient.balance_due).toFixed(2)}
+                </p>
+              )}
             </div>
             <div className="flex gap-2">
-              <button onClick={openEditClientForm} className="text-xs text-gray-500 hover:text-gray-900">
+              <button
+                onClick={() => {
+                  setClientForm({
+                    name: selectedClient.name ?? "",
+                    tax_id: selectedClient.tax_id ?? "",
+                    fiscal_address: selectedClient.fiscal_address ?? "",
+                    phone: selectedClient.phone ?? "",
+                    city: selectedClient.city ?? "",
+                    state: selectedClient.state ?? "",
+                    salesperson: selectedClient.salesperson ?? "",
+                    price_tier: String(selectedClient.price_tier ?? 1),
+                  });
+                  setShowClientForm(true);
+                }}
+                className="text-xs text-gray-500 hover:text-gray-900"
+              >
                 Editar
               </button>
               <button
@@ -377,14 +378,17 @@ function NuevaNotaInner() {
                 onChange={(e) => searchClients(e.target.value)}
               />
               {clientResults.length > 0 && (
-                <div className="border border-gray-200 rounded-md mt-1 bg-white shadow-sm">
+                <div className="border border-gray-200 rounded-md mt-1 bg-white shadow-sm max-h-60 overflow-y-auto">
                   {clientResults.map((c) => (
                     <button
                       key={c.id}
                       onClick={() => selectClient(c)}
                       className="w-full flex justify-between px-3 py-2 text-sm hover:bg-gray-50 text-left"
                     >
-                      <span>{c.name}</span>
+                      <span>
+                        {c.name}
+                        <span className="text-xs text-gray-400 ml-2">T{c.price_tier ?? 1}</span>
+                      </span>
                       <span className="text-gray-400 text-xs">
                         {[c.tax_id, c.city].filter(Boolean).join(" - ")}
                       </span>
@@ -401,19 +405,15 @@ function NuevaNotaInner() {
                 onChange={(e) => setQuickClientName(e.target.value)}
               />
               <button
-                onClick={openNewClientForm}
+                onClick={() => {
+                  setClientForm({ ...emptyClientForm, name: quickClientName });
+                  setShowClientForm(true);
+                }}
                 className="text-sm border border-gray-300 rounded-md px-3 py-2 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors whitespace-nowrap"
               >
                 {quickClientName ? "Registrar completo" : "+ Nuevo cliente"}
               </button>
             </div>
-            {quickClientName && (
-              <p className="text-xs text-gray-500 mt-2">
-                Esta nota se guardara a nombre de{" "}
-                <span className="text-gray-900 font-medium">{quickClientName}</span> (sin
-                registrar). Puedes registrarlo completo cuando quieras.
-              </p>
-            )}
           </>
         )}
 
@@ -429,20 +429,29 @@ function NuevaNotaInner() {
                 ["state", "Estado"],
                 ["salesperson", "Vendedor"],
               ] as [keyof typeof clientForm, string][]
-            ).map(([field, label]) => (
+            ).map(([f, label]) => (
               <input
-                key={field}
+                key={f}
                 className="border border-gray-200 rounded-md px-3 py-2 text-sm"
                 placeholder={label}
-                value={clientForm[field]}
-                onChange={(e) => setClientForm((f) => ({ ...f, [field]: e.target.value }))}
+                value={clientForm[f]}
+                onChange={(e) => setClientForm((x) => ({ ...x, [f]: e.target.value }))}
               />
             ))}
-            <div className="col-span-2 flex justify-end gap-2 mt-1">
-              <button
-                onClick={() => setShowClientForm(false)}
-                className="text-sm text-gray-500 px-3 py-1.5"
+            <div>
+              <select
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+                value={clientForm.price_tier}
+                onChange={(e) => setClientForm((x) => ({ ...x, price_tier: e.target.value }))}
               >
+                <option value="1">Tarifa 1 (contado)</option>
+                <option value="2">Tarifa 2 (credito)</option>
+                <option value="3">Tarifa 3</option>
+                <option value="4">Tarifa 4</option>
+              </select>
+            </div>
+            <div className="col-span-2 flex justify-end gap-2 mt-1">
+              <button onClick={() => setShowClientForm(false)} className="text-sm text-gray-500 px-3 py-1.5">
                 Cancelar
               </button>
               <button
@@ -463,10 +472,10 @@ function NuevaNotaInner() {
           <label className="text-xs text-gray-500">Buscar producto</label>
           <div className="flex gap-2">
             <button
-              onClick={showAllProducts}
+              onClick={() => setShowPicker(true)}
               className="text-xs border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
             >
-              {results.length > 0 ? "Ocultar listado" : "Ver listado completo"}
+              Ver catalogo
             </button>
             <button
               onClick={addManualProduct}
@@ -478,7 +487,7 @@ function NuevaNotaInner() {
         </div>
         <input
           className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
-          placeholder="Codigo o descripcion"
+          placeholder="Codigo o descripcion (acepta errores de tipeo)"
           value={query}
           onChange={(e) => searchProducts(e.target.value)}
         />
@@ -487,13 +496,14 @@ function NuevaNotaInner() {
             {results.map((p) => (
               <button
                 key={p.id}
-                onClick={() => addProduct(p)}
+                onClick={() => addProduct(p, tier)}
                 className="w-full flex justify-between px-3 py-2 text-sm hover:bg-gray-50 text-left"
               >
                 <span>
                   <span className="text-gray-400">{p.code}</span> - {p.description}
+                  <span className="text-gray-400 text-xs ml-2">{p.category}</span>
                 </span>
-                <span className="text-gray-500">${p.price_1?.toFixed(2)}</span>
+                <span className="text-gray-500">${priceOf(p, tier).toFixed(2)}</span>
               </button>
             ))}
           </div>
@@ -505,18 +515,16 @@ function NuevaNotaInner() {
           <tr className="text-xs text-gray-400 text-left">
             <th className="font-normal py-1 w-24">Codigo</th>
             <th className="font-normal py-1">Producto</th>
-            <th className="font-normal py-1 w-16">Cant.</th>
-            <th className="font-normal py-1 w-20">Precio (USD)</th>
-            <th className="font-normal py-1 w-20 text-right">Total (USD)</th>
-            {isForeignCurrency && (
-              <th className="font-normal py-1 w-24 text-right">Total ({currencyLabel})</th>
-            )}
+            <th className="font-normal py-1 w-14">Cant.</th>
+            <th className="font-normal py-1 w-36">Precio</th>
+            <th className="font-normal py-1 w-20 text-right">Total</th>
+            {isForeign && <th className="font-normal py-1 w-24 text-right">{curLabel}</th>}
             <th className="w-6"></th>
           </tr>
         </thead>
         <tbody>
-          {items.map((it, index) => (
-            <tr key={index} className="border-t border-gray-100">
+          {items.map((it, i) => (
+            <tr key={i} className="border-t border-gray-100 align-top">
               <td className="py-2 text-gray-400 text-xs">
                 {it.product_id ? (
                   it.code_snapshot
@@ -525,7 +533,7 @@ function NuevaNotaInner() {
                     className="w-20 border border-gray-200 rounded px-2 py-1 text-xs"
                     placeholder="Codigo"
                     value={it.code_snapshot}
-                    onChange={(e) => updateItemText(index, "code_snapshot", e.target.value)}
+                    onChange={(e) => updateItemText(i, "code_snapshot", e.target.value)}
                   />
                 )}
               </td>
@@ -535,18 +543,18 @@ function NuevaNotaInner() {
                 ) : (
                   <input
                     className="w-full border border-gray-200 rounded px-2 py-1"
-                    placeholder="Descripcion del producto"
+                    placeholder="Descripcion"
                     value={it.description_snapshot}
-                    onChange={(e) => updateItemText(index, "description_snapshot", e.target.value)}
+                    onChange={(e) => updateItemText(i, "description_snapshot", e.target.value)}
                   />
                 )}
               </td>
               <td className="py-2">
                 <input
                   type="number"
-                  className="w-14 border border-gray-200 rounded px-2 py-1"
+                  className="w-12 border border-gray-200 rounded px-2 py-1"
                   value={it.quantity}
-                  onChange={(e) => updateItem(index, "quantity", Number(e.target.value))}
+                  onChange={(e) => updateItem(i, "quantity", Number(e.target.value))}
                 />
               </td>
               <td className="py-2">
@@ -554,19 +562,42 @@ function NuevaNotaInner() {
                   type="number"
                   className="w-20 border border-gray-200 rounded px-2 py-1"
                   value={it.unit_price}
-                  onChange={(e) => updateItem(index, "unit_price", Number(e.target.value))}
+                  onChange={(e) => updateItem(i, "unit_price", Number(e.target.value))}
                 />
+                {it.prices && (
+                  <div className="mt-1 flex items-center gap-1">
+                    {[1, 2, 3, 4].map((t) =>
+                      it.prices?.[t - 1] != null ? (
+                        <button
+                          key={t}
+                          onClick={() => setLineTier(i, t)}
+                          title={`Precio ${t}: $${Number(it.prices?.[t - 1]).toFixed(2)}`}
+                          className={`text-[10px] rounded px-1.5 py-0.5 border transition-colors ${
+                            it.price_tier_used === t
+                              ? "bg-gray-900 text-white border-gray-900"
+                              : "border-gray-300 text-gray-500 hover:bg-gray-100"
+                          }`}
+                        >
+                          T{t}
+                        </button>
+                      ) : null
+                    )}
+                    {it.price_tier_used === null && (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 rounded px-1.5 py-0.5">
+                        manual
+                      </span>
+                    )}
+                  </div>
+                )}
               </td>
               <td className="py-2 text-right">${it.line_total.toFixed(2)}</td>
-              {isForeignCurrency && (
+              {isForeign && (
                 <td className="py-2 text-right text-gray-700">
-                  {(it.line_total * effectiveRate).toLocaleString(undefined, {
-                    maximumFractionDigits: 2,
-                  })}
+                  {fmt(it.line_total * effectiveRate)}
                 </td>
               )}
               <td className="py-2 text-right">
-                <button onClick={() => removeItem(index)} className="text-gray-400 hover:text-red-500">
+                <button onClick={() => removeItem(i)} className="text-gray-400 hover:text-red-500">
                   x
                 </button>
               </td>
@@ -574,6 +605,31 @@ function NuevaNotaInner() {
           ))}
         </tbody>
       </table>
+
+      {/* Cobro */}
+      <div className="mb-4 border border-gray-200 rounded-lg p-4 flex gap-3 items-end flex-wrap">
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Estado de cobro</label>
+          <select
+            className="border border-gray-200 rounded-md px-3 py-2 text-sm"
+            value={paymentStatus}
+            onChange={(e) => setPaymentStatus(e.target.value)}
+          >
+            <option value="PENDIENTE">Pendiente</option>
+            <option value="COBRADO">Cobrado</option>
+            <option value="ANULADO">Anulado</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Fecha de vencimiento</label>
+          <input
+            type="date"
+            className="border border-gray-200 rounded-md px-3 py-2 text-sm"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+          />
+        </div>
+      </div>
 
       {/* Moneda */}
       <div className="mb-6 border border-gray-200 rounded-lg p-4">
@@ -588,12 +644,11 @@ function NuevaNotaInner() {
           <option value="BS_BINANCE">Bolivares - tasa Binance</option>
           <option value="BS_BCV">Bolivares - tasa BCV (con ajuste de brecha)</option>
         </select>
-
-        {isForeignCurrency && (
+        {isForeign && (
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="text-xs text-gray-500 block mb-1">
-                Tasa del dia ({currencyLabel} por USD)
+                Tasa del dia ({curLabel} por USD)
               </label>
               <input
                 type="number"
@@ -617,7 +672,38 @@ function NuevaNotaInner() {
         )}
       </div>
 
-      <div className="flex justify-end mb-6">
+      <div className="flex justify-between items-start gap-4 mb-6">
+        <div>
+          <button
+            onClick={() => setShowProfit((s) => !s)}
+            className="text-xs border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
+          >
+            {showProfit ? "Ocultar rentabilidad" : "Ver rentabilidad"}
+          </button>
+          {showProfit && (
+            <div className="mt-2 bg-gray-50 rounded-lg p-3 text-sm w-60">
+              <div className="flex justify-between text-gray-500 py-0.5">
+                <span>Costo total</span>
+                <span>${totalCost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-gray-500 py-0.5">
+                <span>Venta total</span>
+                <span>${total.toFixed(2)}</span>
+              </div>
+              <div
+                className={`flex justify-between font-medium pt-1 mt-1 border-t border-gray-200 ${
+                  profit >= 0 ? "text-green-700" : "text-red-600"
+                }`}
+              >
+                <span>Ganancia</span>
+                <span>
+                  ${profit.toFixed(2)} ({margin.toFixed(1)}%)
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="w-72 text-sm">
           <div className="flex justify-between text-gray-500 py-1">
             <span>Subtotal (USD)</span>
@@ -640,20 +726,19 @@ function NuevaNotaInner() {
             <span>Total (USD)</span>
             <span>${total.toFixed(2)}</span>
           </div>
-
-          {isForeignCurrency && (
+          {isForeign && (
             <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
               <div className="flex justify-between text-gray-500 py-1">
-                <span>Subtotal ({currencyLabel})</span>
-                <span>{subtotalInCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                <span>Subtotal ({curLabel})</span>
+                <span>{fmt(subtotal * effectiveRate)}</span>
               </div>
               <div className="flex justify-between text-gray-500 py-1">
-                <span>Descuento ({currencyLabel})</span>
-                <span>-{discountInCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                <span>Descuento ({curLabel})</span>
+                <span>-{fmt(discountAmount * effectiveRate)}</span>
               </div>
               <div className="flex justify-between font-medium text-base pt-1">
-                <span>Total ({currencyLabel})</span>
-                <span>{totalInCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                <span>Total ({curLabel})</span>
+                <span>{fmt(total * effectiveRate)}</span>
               </div>
             </div>
           )}
