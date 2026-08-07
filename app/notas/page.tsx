@@ -15,6 +15,9 @@ type NoteRow = {
   subtotal: number;
   discount: number;
   total: number;
+  total_cost: number;
+  payment_status: string;
+  due_date: string | null;
   created_at: string;
 };
 
@@ -49,6 +52,7 @@ export default function NotasPage() {
   // filtros
   const [search, setSearch] = useState("");
   const [currencyFilter, setCurrencyFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [sortBy, setSortBy] = useState("date_desc");
   const [showFilters, setShowFilters] = useState(false);
 
@@ -85,6 +89,9 @@ export default function NotasPage() {
           ? list.filter((n) => n.currency_mode !== "USD")
           : list.filter((n) => n.currency_mode === currencyFilter);
     }
+    if (statusFilter !== "ALL") {
+      list = list.filter((n) => (n.payment_status ?? "PENDIENTE") === statusFilter);
+    }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(
@@ -110,9 +117,14 @@ export default function NotasPage() {
         list.sort((a, b) => b.created_at.localeCompare(a.created_at));
     }
     return list;
-  }, [notes, search, currencyFilter, sortBy]);
+  }, [notes, search, currencyFilter, statusFilter, sortBy]);
 
-  const isCustomOrder = sortBy !== "date_desc" || search.trim() || currencyFilter !== "ALL";
+  const isCustomOrder =
+    sortBy !== "date_desc" || search.trim() || currencyFilter !== "ALL" || statusFilter !== "ALL";
+
+  const totalPendiente = notes
+    .filter((n) => (n.payment_status ?? "PENDIENTE") === "PENDIENTE")
+    .reduce((s, n) => s + n.total, 0);
 
   // Agrupar por año > mes > dia (solo cuando no hay filtros/orden custom)
   const years: Record<string, Record<string, Record<string, NoteRow[]>>> = {};
@@ -141,6 +153,17 @@ export default function NotasPage() {
           {n.display_name}
         </div>
         <div className="flex items-center gap-3">
+          <span
+            className={`text-[10px] rounded px-1.5 py-0.5 ${
+              n.payment_status === "COBRADO"
+                ? "bg-green-100 text-green-800"
+                : n.payment_status === "ANULADO"
+                ? "bg-gray-100 text-gray-500"
+                : "bg-amber-100 text-amber-800"
+            }`}
+          >
+            {n.payment_status ?? "PENDIENTE"}
+          </span>
           {foreign ? (
             <span
               title={`${converted.toLocaleString(undefined, {
@@ -189,6 +212,11 @@ export default function NotasPage() {
           <h1 className="text-lg font-medium">Notas</h1>
           <p className="text-sm text-gray-500">
             {filtered.length} de {notes.length} notas
+            {totalPendiente > 0 && (
+              <span className="text-amber-700 ml-2">
+                · ${totalPendiente.toFixed(2)} por cobrar
+              </span>
+            )}
           </p>
         </div>
         <div className="flex gap-2">
@@ -208,7 +236,7 @@ export default function NotasPage() {
       </div>
 
       {showFilters && (
-        <div className="border border-gray-200 rounded-lg p-4 mb-6 grid grid-cols-3 gap-3">
+        <div className="border border-gray-200 rounded-lg p-4 mb-6 grid grid-cols-4 gap-3">
           <div>
             <label className="text-xs text-gray-500 block mb-1">Buscar</label>
             <input
@@ -231,6 +259,19 @@ export default function NotasPage() {
               <option value="COP">Pesos (COP)</option>
               <option value="BS_BINANCE">Bs Binance</option>
               <option value="BS_BCV">Bs BCV</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Cobro</label>
+            <select
+              className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="ALL">Todas</option>
+              <option value="PENDIENTE">Pendientes</option>
+              <option value="COBRADO">Cobradas</option>
+              <option value="ANULADO">Anuladas</option>
             </select>
           </div>
           <div>
