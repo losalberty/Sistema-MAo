@@ -590,7 +590,35 @@ function NuevaNotaInner() {
                   </div>
                 )}
               </td>
-              <td className="py-2 text-right">${it.line_total.toFixed(2)}</td>
+              <td className="py-2 text-right">
+                ${it.line_total.toFixed(2)}
+                {showProfit && (
+                  <div className="mt-1 flex items-center justify-end gap-1">
+                    <span className="text-[10px] text-gray-400">costo</span>
+                    <input
+                      type="number"
+                      className="w-14 border border-gray-200 rounded px-1 py-0.5 text-[11px] text-right"
+                      value={it.cost_snapshot}
+                      onChange={(e) => updateItem(i, "cost_snapshot", Number(e.target.value))}
+                    />
+                    <span
+                      className={`text-[10px] rounded px-1.5 py-0.5 ${
+                        it.cost_snapshot <= 0
+                          ? "bg-gray-100 text-gray-500"
+                          : it.unit_price / it.cost_snapshot - 1 < 0
+                          ? "bg-red-100 text-red-800"
+                          : it.unit_price / it.cost_snapshot - 1 < 0.15
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-green-100 text-green-800"
+                      }`}
+                    >
+                      {it.cost_snapshot > 0
+                        ? `${(((it.unit_price - it.cost_snapshot) / it.cost_snapshot) * 100).toFixed(0)}%`
+                        : "sin costo"}
+                    </span>
+                  </div>
+                )}
+              </td>
               {isForeign && (
                 <td className="py-2 text-right text-gray-700">
                   {fmt(it.line_total * effectiveRate)}
