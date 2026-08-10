@@ -34,6 +34,7 @@ const navItems = [
   { label: "Notas", icon: "☷", href: "/notas" },
   { label: "Clientes", icon: "▤", href: "/clientes" },
   { label: "Productos", icon: "▦", href: "/productos" },
+  { label: "Compras", icon: "▩", href: "/compras" },
   { label: "Informes", icon: "▧", href: "/informes" },
   { label: "Configuracion", icon: "⚙", href: null },
 ];
