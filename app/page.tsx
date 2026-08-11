@@ -29,16 +29,6 @@ type Week = {
   low_margin_notes: number;
 };
 
-const navItems = [
-  { label: "Panel", icon: "▣", active: true, href: "/" },
-  { label: "Notas", icon: "☷", href: "/notas" },
-  { label: "Clientes", icon: "▤", href: "/clientes" },
-  { label: "Productos", icon: "▦", href: "/productos" },
-  { label: "Compras", icon: "▩", href: "/compras" },
-  { label: "Informes", icon: "▧", href: "/informes" },
-  { label: "Configuracion", icon: "⚙", href: null },
-];
-
 const DIAS = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
 const MESES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -99,10 +89,6 @@ export default function Home() {
     };
   }, [offset]);
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
-  }
-
   const profit = week ? week.sales - week.cost : 0;
   const margin = week && week.cost > 0 ? (profit / week.cost) * 100 : null;
   const delta =
@@ -116,41 +102,7 @@ export default function Home() {
   const todayIso = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
-      <aside className="w-52 bg-white border-r border-gray-200 p-4 flex flex-col">
-        <p className="text-base font-medium mb-8 tracking-tight">Sistema Save Notas</p>
-        <nav className="flex flex-col gap-1">
-          {navItems.map((item) => {
-            const classes = `flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-              item.active
-                ? "bg-indigo-600 text-white"
-                : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-700"
-            }`;
-            if (item.href) {
-              return (
-                <Link key={item.label} href={item.href} className={classes}>
-                  <span className="text-xs">{item.icon}</span>
-                  {item.label}
-                </Link>
-              );
-            }
-            return (
-              <div key={item.label} className={`${classes} opacity-50 cursor-default`}>
-                <span className="text-xs">{item.icon}</span>
-                {item.label}
-              </div>
-            );
-          })}
-        </nav>
-        <button
-          onClick={handleLogout}
-          className="mt-auto text-xs text-gray-400 hover:text-gray-700 text-left"
-        >
-          Cerrar sesion
-        </button>
-      </aside>
-
-      <main className="flex-1 p-10 max-w-6xl">
+    <main className="p-10 max-w-6xl">
         <div className="flex items-end justify-between mb-8">
           <div>
             <h1 className="text-xl font-medium mb-1">{greeting()}, Mao</h1>
@@ -412,7 +364,6 @@ export default function Home() {
             )}
           </>
         )}
-      </main>
-    </div>
+    </main>
   );
 }
