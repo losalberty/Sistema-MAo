@@ -102,6 +102,16 @@ export default function ComprasPage() {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<ProductHit[]>([]);
 
+  // proveedor nuevo
+  const [showSupplier, setShowSupplier] = useState(false);
+  const [sForm, setSForm] = useState({
+    name: "",
+    phone: "",
+    contact: "",
+    credit_days: "0",
+    default_discount: "0",
+  });
+
   // pago
   const [payFor, setPayFor] = useState<LedgerRow | null>(null);
   const [payAmount, setPayAmount] = useState("");
@@ -138,6 +148,30 @@ export default function ComprasPage() {
   );
 
   const currentSupplier = suppliers.find((s) => s.id === current);
+
+  async function saveSupplier() {
+    if (!sForm.name.trim()) return setError("El proveedor necesita un nombre.");
+    setError(null);
+    const { data, error } = await supabase.rpc("upsert_supplier", {
+      p_id: null,
+      p_name: sForm.name.trim(),
+      p_phone: sForm.phone || null,
+      p_contact: sForm.contact || null,
+      p_notes: null,
+    });
+    if (error) return setError(error.message);
+    const id = data as string;
+    await supabase.rpc("update_supplier_terms", {
+      p_id: id,
+      p_credit_days: Number(sForm.credit_days) || 0,
+      p_default_discount: Number(sForm.default_discount) || 0,
+    });
+    setShowSupplier(false);
+    setSForm({ name: "", phone: "", contact: "", credit_days: "0", default_discount: "0" });
+    setCurrent(id);
+    setInfo("Proveedor registrado.");
+    loadSuppliers();
+  }
 
   // ---------- formulario ----------
 
@@ -330,6 +364,12 @@ export default function ComprasPage() {
         </div>
         <div className="flex gap-2">
           <button
+            onClick={() => setShowSupplier((s) => !s)}
+            className="text-sm border border-gray-300 rounded-lg px-4 py-2 hover:border-indigo-400 hover:text-indigo-700 hover:bg-indigo-50 transition-colors"
+          >
+            + Proveedor
+          </button>
+          <button
             onClick={() => openPay(null)}
             disabled={!current}
             className="text-sm border border-gray-300 rounded-lg px-4 py-2 hover:border-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-40"
@@ -348,6 +388,50 @@ export default function ComprasPage() {
       {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
       {info && <p className="text-emerald-600 text-sm mb-4">{info}</p>}
       {loading && <p className="text-sm text-gray-400">Cargando...</p>}
+
+      {/* ---------- proveedor nuevo ---------- */}
+      {showSupplier && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+          <p className="text-sm font-medium mb-4">Nuevo proveedor</p>
+          <div className="grid grid-cols-5 gap-3 mb-3">
+            {(
+              [
+                ["name", "Nombre", "text"],
+                ["phone", "Telefono", "text"],
+                ["contact", "Persona de contacto", "text"],
+                ["credit_days", "Dias de credito", "number"],
+                ["default_discount", "Descuento habitual %", "number"],
+              ] as [keyof typeof sForm, string, string][]
+            ).map(([field, label, type]) => (
+              <div key={field}>
+                <label className="text-xs text-gray-500 block mb-1">{label}</label>
+                <input
+                  type={type}
+                  value={sForm[field]}
+                  onChange={(e) => setSForm((f) => ({ ...f, [field]: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm hover:border-gray-400 focus:border-indigo-500 focus:outline-none transition-colors"
+                />
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mb-3">
+            Los dias de credito calculan solos la fecha de vencimiento, y el descuento habitual
+            viene puesto por defecto en cada factura de este proveedor.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setShowSupplier(false)} className="text-sm text-gray-500 px-3">
+              Cancelar
+            </button>
+            <button
+              onClick={saveSupplier}
+              disabled={!sForm.name.trim()}
+              className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-40"
+            >
+              Guardar proveedor
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ---------- formulario de factura ---------- */}
       {showForm && (
@@ -702,9 +786,13 @@ export default function ComprasPage() {
             );
           })}
           {suppliers.length === 0 && !loading && (
-            <p className="text-sm text-gray-400">
-              Aun no hay proveedores. Se crean desde Productos → Compra → Importar.
-            </p>
+            <button
+              onClick={() => setShowSupplier(true)}
+              className="w-full text-left border border-dashed border-gray-300 rounded-lg px-3 py-4 text-sm text-gray-500 hover:border-indigo-400 hover:text-indigo-700 hover:bg-indigo-50/50 transition-colors"
+            >
+              Aun no hay proveedores.
+              <span className="block text-xs mt-1">Registra el primero aqui →</span>
+            </button>
           )}
         </div>
 
