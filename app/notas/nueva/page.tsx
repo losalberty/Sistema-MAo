@@ -155,6 +155,16 @@ function NuevaNotaInner() {
     setResults(data ?? []);
   }
 
+  function focusEl(id: string) {
+    setTimeout(() => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      if (el) {
+        el.focus();
+        el.select?.();
+      }
+    }, 30);
+  }
+
   function addProduct(p: PickerProduct, tierUsed: number) {
     const price = priceOf(p, tierUsed);
     setItems((prev) => [
@@ -486,10 +496,35 @@ function NuevaNotaInner() {
           </div>
         </div>
         <input
+          id="buscador"
           className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
-          placeholder="Codigo o descripcion (acepta errores de tipeo)"
+          placeholder="Codigo o descripcion — Enter agrega el primero, Tab pasa al siguiente campo"
           value={query}
           onChange={(e) => searchProducts(e.target.value)}
+          onKeyDown={async (e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            const next = items.length;
+            if (results.length > 0) {
+              addProduct(results[0], tier);
+              focusEl(`cant-${next}`);
+              return;
+            }
+            // el usuario escribio rapido y la busqueda aun no responde:
+            // se resuelve al vuelo, priorizando coincidencia exacta de codigo
+            const text = query.trim();
+            if (!text) return;
+            const { data } = await supabase.rpc("search_products", { search_text: text });
+            const hits = (data ?? []) as PickerProduct[];
+            if (hits.length === 0) {
+              setError(`No se encontro "${text}".`);
+              return;
+            }
+            const norm = (s: string) => s.replace(/\s+/g, "").toUpperCase();
+            const exact = hits.find((h) => norm(h.code) === norm(text));
+            addProduct(exact ?? hits[0], tier);
+            focusEl(`cant-${next}`);
+          }}
         />
         {results.length > 0 && (
           <div className="border border-gray-200 rounded-md mt-1 bg-white shadow-sm max-h-72 overflow-y-auto">
@@ -552,17 +587,33 @@ function NuevaNotaInner() {
               <td className="py-2">
                 <input
                   type="number"
+                  id={`cant-${i}`}
                   className="w-12 border border-gray-200 rounded px-2 py-1"
                   value={it.quantity}
+                  onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) => updateItem(i, "quantity", Number(e.target.value))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      focusEl(`precio-${i}`);
+                    }
+                  }}
                 />
               </td>
               <td className="py-2">
                 <input
                   type="number"
+                  id={`precio-${i}`}
                   className="w-20 border border-gray-200 rounded px-2 py-1"
                   value={it.unit_price}
+                  onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) => updateItem(i, "unit_price", Number(e.target.value))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      focusEl("buscador");
+                    }
+                  }}
                 />
                 {it.prices && (
                   <div className="mt-1 flex items-center gap-1">
