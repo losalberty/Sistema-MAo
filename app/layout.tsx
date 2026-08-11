@@ -1,5 +1,6 @@
 import "./globals.css";
 import AuthGate from "@/components/AuthGate";
+import Shell from "@/components/Shell";
 
 export const metadata = {
   title: "Sistema Save Notas",
@@ -10,7 +11,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body className="bg-gray-50 text-gray-900">
-        <AuthGate>{children}</AuthGate>
+        <AuthGate>
+          <Shell>{children}</Shell>
+        </AuthGate>
       </body>
     </html>
   );
