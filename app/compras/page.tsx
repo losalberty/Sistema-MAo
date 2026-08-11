@@ -193,6 +193,16 @@ export default function ComprasPage() {
     setInfo(null);
   }
 
+  function focusEl(id: string) {
+    setTimeout(() => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      if (el) {
+        el.focus();
+        el.select?.();
+      }
+    }, 30);
+  }
+
   function setLine(i: number, patch: Partial<Line>) {
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
@@ -205,6 +215,69 @@ export default function ComprasPage() {
     setLines((prev) => (prev.length === 1 ? [{ ...emptyLine }] : prev.filter((_, x) => x !== i)));
   }
 
+  // ---------- navegacion con teclado ----------
+  // Columnas: 0 codigo · 1 descripcion · 2 cantidad · 3 precio · 4 descuento
+
+  const CELL_IDS = ["cod", "desc", "cant", "prec", "dto"];
+
+  function focusCell(row: number, col: number) {
+    focusEl(`${CELL_IDS[col]}-${row}`);
+  }
+
+  async function resolveCode(i: number, text: string) {
+    const t = text.trim();
+    if (!t) return false;
+    const { data } = await supabase.rpc("search_products", { search_text: t });
+    const hits = (data ?? []) as ProductHit[];
+    if (hits.length === 0) return false;
+    const norm = (s: string) => s.replace(/\s+/g, "").toUpperCase();
+    const p = hits.find((h) => norm(h.code) === norm(t)) ?? hits[0];
+    setLine(i, {
+      code: p.code,
+      description: p.description,
+      list_price: String(p.purchase_price ?? 0),
+      previous_cost: p.cost != null ? Number(p.cost) : null,
+      known: true,
+    });
+    setPickerRow(null);
+    setHits([]);
+    return true;
+  }
+
+  async function onCellKey(e: React.KeyboardEvent<HTMLInputElement>, i: number, col: number) {
+    const last = lines.length - 1;
+
+    if (e.key === "ArrowDown" && i < last) {
+      e.preventDefault();
+      return focusCell(i + 1, col);
+    }
+    if (e.key === "ArrowUp" && i > 0) {
+      e.preventDefault();
+      return focusCell(i - 1, col);
+    }
+
+    // Tab en la ultima celda de la ultima fila: abre una fila nueva
+    if (e.key === "Tab" && !e.shiftKey && col === 4 && i === last) {
+      e.preventDefault();
+      addLine();
+      return focusCell(i + 1, 0);
+    }
+
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+
+    if (col === 0) {
+      const ok = await resolveCode(i, lines[i].code);
+      // si lo encontro, la descripcion y el precio ya estan: salta a cantidad
+      return focusCell(i, ok ? 2 : 1);
+    }
+    if (col < 4) return focusCell(i, col + 1);
+
+    // Enter en la ultima columna: siguiente fila (creandola si hace falta)
+    if (i === last) addLine();
+    return focusCell(i + 1, 0);
+  }
+
   async function search(text: string) {
     setQuery(text);
     if (text.trim().length < 2) return setHits([]);
@@ -212,9 +285,10 @@ export default function ComprasPage() {
     setHits(((data ?? []) as ProductHit[]).slice(0, 12));
   }
 
-  function pick(p: ProductHit) {
-    if (pickerRow == null) return;
-    setLine(pickerRow, {
+  function pick(p: ProductHit, row?: number) {
+    const i = row ?? pickerRow;
+    if (i == null) return;
+    setLine(i, {
       code: p.code,
       description: p.description,
       list_price: String(p.purchase_price ?? 0),
@@ -224,6 +298,16 @@ export default function ComprasPage() {
     setPickerRow(null);
     setQuery("");
     setHits([]);
+    focusEl(`cant-${i}`);
+  }
+
+  function nextLine(i: number) {
+    if (i === lines.length - 1) {
+      addLine();
+      focusEl(`cod-${i + 1}`);
+    } else {
+      focusEl(`cod-${i + 1}`);
+    }
   }
 
   const computed = useMemo(() => {
@@ -573,6 +657,7 @@ export default function ComprasPage() {
                   <tr key={i} className="border-t border-gray-100">
                     <td className="py-1.5 pr-2">
                       <input
+                        id={`cod-${i}`}
                         value={l.code}
                         onFocus={() => setPickerRow(i)}
                         onChange={(e) => {
@@ -580,38 +665,59 @@ export default function ComprasPage() {
                           setPickerRow(i);
                           search(e.target.value);
                         }}
-                        placeholder="buscar..."
-                        className="w-full border border-gray-200 rounded px-2 py-1"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && hits.length > 0 && pickerRow === i) {
+                            e.preventDefault();
+                            pick(hits[0], i);
+                            return;
+                          }
+                          onCellKey(e, i, 0);
+                        }}
+                        placeholder="codigo..."
+                        className={`w-full border rounded px-2 py-1 ${
+                          l.known ? "border-emerald-300 bg-emerald-50/50" : "border-gray-200"
+                        }`}
                       />
                     </td>
                     <td className="py-1.5 pr-2">
                       <input
+                        id={`desc-${i}`}
                         value={l.description}
                         onChange={(e) => setLine(i, { description: e.target.value })}
+                        onKeyDown={(e) => onCellKey(e, i, 1)}
                         className="w-full border border-gray-200 rounded px-2 py-1"
                       />
                     </td>
                     <td className="py-1.5 pr-2">
                       <input
                         type="number"
+                        id={`cant-${i}`}
                         value={l.quantity}
+                        onFocus={(e) => e.currentTarget.select()}
                         onChange={(e) => setLine(i, { quantity: e.target.value })}
+                        onKeyDown={(e) => onCellKey(e, i, 2)}
                         className="w-full border border-gray-200 rounded px-2 py-1 text-right"
                       />
                     </td>
                     <td className="py-1.5 pr-2">
                       <input
                         type="number"
+                        id={`prec-${i}`}
                         value={l.list_price}
+                        onFocus={(e) => e.currentTarget.select()}
                         onChange={(e) => setLine(i, { list_price: e.target.value })}
+                        onKeyDown={(e) => onCellKey(e, i, 3)}
                         className="w-full border border-gray-200 rounded px-2 py-1 text-right"
                       />
                     </td>
                     <td className="py-1.5 pr-2">
                       <input
                         type="number"
+                        id={`dto-${i}`}
                         value={l.discount_percent}
+                        onFocus={(e) => e.currentTarget.select()}
                         onChange={(e) => setLine(i, { discount_percent: e.target.value })}
+                        onKeyDown={(e) => onCellKey(e, i, 4)}
                         placeholder={discount}
                         className="w-full border border-gray-200 rounded px-2 py-1 text-right"
                       />
@@ -659,12 +765,20 @@ export default function ComprasPage() {
             </div>
           )}
 
-          <button
-            onClick={addLine}
-            className="text-xs text-gray-500 hover:text-indigo-600 transition-colors mb-4"
-          >
-            + Agregar linea
-          </button>
+          <div className="flex items-center gap-4 mb-4">
+            <button
+              onClick={() => {
+                addLine();
+                focusCell(lines.length, 0);
+              }}
+              className="text-xs text-gray-500 hover:text-indigo-600 transition-colors"
+            >
+              + Agregar linea
+            </button>
+            <span className="text-[11px] text-gray-400">
+              Enter avanza de campo y abre la linea siguiente · Tab tambien · ↑ ↓ cambian de fila
+            </span>
+          </div>
 
           {computed.knownCount > 0 && (
             <div
