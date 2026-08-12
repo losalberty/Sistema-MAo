@@ -71,6 +71,8 @@ function NuevaNotaInner() {
   const [paymentStatus, setPaymentStatus] = useState("PENDIENTE");
   const [dueDate, setDueDate] = useState("");
   const [showProfit, setShowProfit] = useState(false);
+  const [newCode, setNewCode] = useState("");
+  const [codeError, setCodeError] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [savedNoteNumber, setSavedNoteNumber] = useState<number | null>(null);
@@ -184,6 +186,27 @@ function NuevaNotaInner() {
     ]);
     setQuery("");
     setResults([]);
+  }
+
+  // Escribir el codigo en la linea vacia del final y darle Enter
+  async function addByCode(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter" && !(e.key === "Tab" && !e.shiftKey && newCode.trim())) return;
+    const text = newCode.trim();
+    if (!text) return;
+    e.preventDefault();
+    setCodeError(null);
+    const { data } = await supabase.rpc("search_products", { search_text: text });
+    const hits = (data ?? []) as PickerProduct[];
+    if (hits.length === 0) {
+      setCodeError(`No existe "${text}"`);
+      return;
+    }
+    const norm = (s: string) => s.replace(/\s+/g, "").toUpperCase();
+    const p = hits.find((h) => norm(h.code) === norm(text)) ?? hits[0];
+    const next = items.length;
+    addProduct(p, tier);
+    setNewCode("");
+    focusEl(`cant-${next}`);
   }
 
   function addManualProduct() {
@@ -611,7 +634,7 @@ function NuevaNotaInner() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      focusEl("buscador");
+                      focusEl("cod-nuevo");
                     }
                   }}
                 />
@@ -682,6 +705,24 @@ function NuevaNotaInner() {
               </td>
             </tr>
           ))}
+
+          {/* Linea vacia: escribe el codigo y Enter la convierte en linea real */}
+          <tr className="border-t border-gray-100">
+            <td className="py-2" colSpan={2}>
+              <input
+                id="cod-nuevo"
+                className="w-48 border border-dashed border-gray-300 rounded px-2 py-1 text-xs focus:border-solid focus:border-indigo-400 focus:outline-none transition-colors"
+                placeholder="Codigo y Enter para agregar..."
+                value={newCode}
+                onChange={(e) => setNewCode(e.target.value)}
+                onKeyDown={addByCode}
+              />
+              {codeError && <span className="text-xs text-red-500 ml-2">{codeError}</span>}
+            </td>
+            <td colSpan={isForeign ? 4 : 3} className="py-2 text-xs text-gray-400">
+              Enter agrega · luego Enter pasa a cantidad, precio, y vuelve aqui
+            </td>
+          </tr>
         </tbody>
       </table>
 
