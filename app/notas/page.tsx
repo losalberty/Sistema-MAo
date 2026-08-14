@@ -26,6 +26,10 @@ const MESES = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
+const DIAS_SEMANA = [
+  "domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado",
+];
+
 const CURRENCY_LABELS: Record<string, string> = {
   USD: "USD",
   COP: "COP",
@@ -122,6 +126,8 @@ export default function NotasPage() {
   const isCustomOrder =
     sortBy !== "date_desc" || search.trim() || currencyFilter !== "ALL" || statusFilter !== "ALL";
 
+  const todayIso = new Date().toISOString().slice(0, 10);
+
   const totalPendiente = notes
     .filter((n) => (n.payment_status ?? "PENDIENTE") === "PENDIENTE")
     .reduce((s, n) => s + n.total, 0);
@@ -144,59 +150,113 @@ export default function NotasPage() {
     const foreign = n.currency_mode !== "USD";
     const rate = effectiveRate(n);
     const converted = n.total * rate;
+    const status = n.payment_status ?? "PENDIENTE";
+    const profit = n.total - (n.total_cost ?? 0);
+    const margin = n.total_cost > 0 ? (profit / n.total_cost) * 100 : null;
+
+    // un color por moneda, sobrio, solo en un punto y en el monto
+    const tone = !foreign
+      ? { dot: "bg-gray-300", text: "text-gray-700", soft: "" }
+      : n.currency_mode === "COP"
+      ? { dot: "bg-violet-400", text: "text-violet-700", soft: "group-hover:bg-violet-50/50" }
+      : n.currency_mode === "BS_BCV"
+      ? { dot: "bg-teal-400", text: "text-teal-700", soft: "group-hover:bg-teal-50/50" }
+      : { dot: "bg-amber-400", text: "text-amber-700", soft: "group-hover:bg-amber-50/50" };
+
     return (
-      <div className="flex items-center justify-between px-3 py-2 text-sm border-t first:border-t-0 border-gray-100 hover:bg-gray-50 transition-colors">
-        <div>
-          <span className="text-gray-400 mr-2">
-            #{String(n.sequence_number).padStart(4, "0")}
-          </span>
-          {n.display_name}
-        </div>
-        <div className="flex items-center gap-3">
-          <span
-            className={`text-[10px] rounded px-1.5 py-0.5 ${
-              n.payment_status === "COBRADO"
-                ? "bg-green-100 text-green-800"
-                : n.payment_status === "ANULADO"
-                ? "bg-gray-100 text-gray-500"
-                : "bg-amber-100 text-amber-800"
-            }`}
+      <div className={`group relative border-t first:border-t-0 border-gray-100 ${tone.soft}`}>
+        <div className="flex items-center gap-3 px-3 py-2.5 text-sm">
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${tone.dot}`} />
+
+          <Link
+            href={`/notas/nueva?id=${n.id}`}
+            className="flex-1 min-w-0 flex items-baseline gap-2 hover:text-indigo-700 transition-colors"
           >
-            {n.payment_status ?? "PENDIENTE"}
-          </span>
-          {foreign ? (
-            <span
-              title={`${converted.toLocaleString(undefined, {
-                maximumFractionDigits: 2,
-              })} ${currencyShort(n.currency_mode)} - tasa ${rate.toLocaleString(undefined, {
-                maximumFractionDigits: 2,
-              })}`}
-              className="group relative border border-amber-300 bg-amber-50 text-amber-800 rounded px-2 py-0.5 cursor-default transition-colors hover:bg-amber-100"
-            >
-              ${n.total.toFixed(2)}
-              <span className="ml-1 text-[10px] uppercase">
-                {CURRENCY_LABELS[n.currency_mode] ?? n.currency_mode}
-              </span>
-              <span className="pointer-events-none absolute right-0 -top-8 hidden group-hover:block whitespace-nowrap bg-gray-900 text-white text-xs rounded px-2 py-1 z-10">
-                {converted.toLocaleString(undefined, { maximumFractionDigits: 2 })}{" "}
-                {currencyShort(n.currency_mode)}
-              </span>
+            <span className="text-gray-300 text-xs tabular-nums shrink-0">
+              {String(n.sequence_number).padStart(4, "0")}
             </span>
-          ) : (
-            <span className="text-gray-600">${n.total.toFixed(2)}</span>
+            <span className="truncate">{n.display_name}</span>
+          </Link>
+
+          {status !== "PENDIENTE" && (
+            <span
+              className={`text-[10px] rounded-full px-2 py-0.5 shrink-0 ${
+                status === "COBRADO"
+                  ? "bg-emerald-50 text-emerald-700"
+                  : "bg-gray-100 text-gray-400 line-through"
+              }`}
+            >
+              {status === "COBRADO" ? "cobrado" : "anulada"}
+            </span>
           )}
-          <Link href={`/notas/ver?id=${n.id}`} className="text-xs text-gray-500 hover:text-gray-900">
-            Ver
-          </Link>
-          <Link href={`/notas/nueva?id=${n.id}`} className="text-xs text-gray-500 hover:text-gray-900">
-            Editar
-          </Link>
-          <button
-            onClick={() => handleDelete(n.id)}
-            className="text-xs text-gray-400 hover:text-red-500"
-          >
-            Eliminar
-          </button>
+
+          <span className={`tabular-nums shrink-0 ${tone.text}`}>${n.total.toFixed(2)}</span>
+
+          <span className="flex gap-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Link href={`/notas/ver?id=${n.id}`} className="text-xs text-gray-400 hover:text-gray-900">
+              ver
+            </Link>
+            <button
+              onClick={() => handleDelete(n.id)}
+              className="text-xs text-gray-300 hover:text-red-500"
+            >
+              eliminar
+            </button>
+          </span>
+        </div>
+
+        {/* Detalle al pasar el puntero */}
+        <div className="pointer-events-none absolute right-3 top-full -mt-1 z-20 hidden group-hover:block">
+          <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
+            <div className="flex justify-between gap-6">
+              <span className="text-gray-400">Fecha</span>
+              <span>{n.note_date}</span>
+            </div>
+            {foreign && (
+              <>
+                <div className="flex justify-between gap-6">
+                  <span className="text-gray-400">Moneda</span>
+                  <span>{CURRENCY_LABELS[n.currency_mode] ?? n.currency_mode}</span>
+                </div>
+                <div className="flex justify-between gap-6">
+                  <span className="text-gray-400">Tasa usada</span>
+                  <span>
+                    {rate.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    {n.currency_mode === "BS_BCV" && (n.exchange_gap_percent ?? 0) > 0 && (
+                      <span className="text-gray-400"> (BCV +{n.exchange_gap_percent}%)</span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-6 border-t border-gray-700 mt-1 pt-1">
+                  <span className="text-gray-400">Cobrado en</span>
+                  <span>
+                    {converted.toLocaleString(undefined, { maximumFractionDigits: 2 })}{" "}
+                    {currencyShort(n.currency_mode)}
+                  </span>
+                </div>
+              </>
+            )}
+            {n.discount > 0 && (
+              <div className="flex justify-between gap-6">
+                <span className="text-gray-400">Descuento</span>
+                <span>${n.discount.toFixed(2)}</span>
+              </div>
+            )}
+            {margin != null && (
+              <div className="flex justify-between gap-6">
+                <span className="text-gray-400">Ganancia</span>
+                <span className={profit >= 0 ? "text-emerald-300" : "text-red-300"}>
+                  ${profit.toFixed(2)} ({margin.toFixed(0)}%)
+                </span>
+              </div>
+            )}
+            {status === "PENDIENTE" && n.due_date && (
+              <div className="flex justify-between gap-6">
+                <span className="text-gray-400">Vence</span>
+                <span className={n.due_date < todayIso ? "text-red-300" : ""}>{n.due_date}</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -294,8 +354,24 @@ export default function NotasPage() {
       {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
       {loading && <p className="text-sm text-gray-400">Cargando...</p>}
 
+      <div className="flex items-center gap-4 mb-4 text-[11px] text-gray-400">
+        <span className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-gray-300" /> dolares
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-violet-400" /> pesos
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Bs Binance
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-teal-400" /> Bs BCV
+        </span>
+        <span className="ml-auto">pasa el puntero sobre una nota para ver el detalle</span>
+      </div>
+
       {isCustomOrder ? (
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <div className="border border-gray-200 rounded-lg bg-white">
           {filtered.map((n) => (
             <NoteLine key={n.id} n={n} />
           ))}
@@ -307,30 +383,44 @@ export default function NotasPage() {
             (a, b) => MESES.indexOf(b) - MESES.indexOf(a)
           );
           return (
-            <details key={year} open className="mb-4">
-              <summary className="text-sm font-medium cursor-pointer py-2">{year}</summary>
+            <div key={year}>
               {monthKeys.map((month) => {
                 const days = months[month];
                 const dayKeys = Object.keys(days).sort().reverse();
+                const monthTotal = dayKeys.reduce(
+                  (s, d) => s + days[d].reduce((x, n) => x + n.total, 0),
+                  0
+                );
+                const monthCount = dayKeys.reduce((s, d) => s + days[d].length, 0);
                 return (
-                  <details key={month} open className="mb-2 ml-2">
-                    <summary className="text-sm text-gray-600 cursor-pointer py-1">
-                      {month} {year}
+                  <details key={month} open className="mb-6 group/mes">
+                    <summary className="flex items-baseline justify-between cursor-pointer list-none py-2 border-b border-gray-200 mb-1">
+                      <span className="text-sm font-medium">
+                        {month} <span className="text-gray-400 font-normal">{year}</span>
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {monthCount} notas · ${monthTotal.toFixed(2)}
+                      </span>
                     </summary>
-                    {dayKeys.map((day) => (
-                      <div key={day} className="mb-3 ml-2">
-                        <p className="text-xs text-gray-400 mb-1">{day}</p>
-                        <div className="border border-gray-200 rounded-lg overflow-hidden">
-                          {days[day].map((n) => (
-                            <NoteLine key={n.id} n={n} />
-                          ))}
+                    {dayKeys.map((day) => {
+                      const d = new Date(day + "T00:00:00");
+                      return (
+                        <div key={day} className="mb-4">
+                          <p className="text-xs text-gray-400 mb-1 pl-3">
+                            {DIAS_SEMANA[d.getDay()]} {d.getDate()}
+                          </p>
+                          <div className="border border-gray-200 rounded-lg bg-white">
+                            {days[day].map((n) => (
+                              <NoteLine key={n.id} n={n} />
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </details>
                 );
               })}
-            </details>
+            </div>
           );
         })
       )}
