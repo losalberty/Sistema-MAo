@@ -156,12 +156,12 @@ export default function NotasPage() {
 
     // un color por moneda, sobrio, solo en un punto y en el monto
     const tone = !foreign
-      ? { dot: "bg-gray-300", text: "text-gray-700", soft: "" }
+      ? { dot: "bg-emerald-500", text: "text-emerald-700", soft: "group-hover:bg-emerald-50/40" }
       : n.currency_mode === "COP"
-      ? { dot: "bg-violet-400", text: "text-violet-700", soft: "group-hover:bg-violet-50/50" }
+      ? { dot: "bg-violet-500", text: "text-violet-700", soft: "group-hover:bg-violet-50/50" }
       : n.currency_mode === "BS_BCV"
-      ? { dot: "bg-teal-400", text: "text-teal-700", soft: "group-hover:bg-teal-50/50" }
-      : { dot: "bg-amber-400", text: "text-amber-700", soft: "group-hover:bg-amber-50/50" };
+      ? { dot: "bg-blue-500", text: "text-blue-700", soft: "group-hover:bg-blue-50/50" }
+      : { dot: "bg-yellow-400", text: "text-yellow-700", soft: "group-hover:bg-yellow-50/50" };
 
     return (
       <div className={`group relative border-t first:border-t-0 border-gray-100 ${tone.soft}`}>
@@ -356,16 +356,16 @@ export default function NotasPage() {
 
       <div className="flex items-center gap-4 mb-4 text-[11px] text-gray-400">
         <span className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-gray-300" /> dolares
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> dolares
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-violet-400" /> pesos
+          <span className="w-1.5 h-1.5 rounded-full bg-violet-500" /> pesos
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Bs Binance
+          <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" /> Bs Binance
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-teal-400" /> Bs BCV
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Bs BCV
         </span>
         <span className="ml-auto">pasa el puntero sobre una nota para ver el detalle</span>
       </div>
