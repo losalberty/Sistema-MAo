@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -50,18 +50,60 @@ type Collection = {
   payments: Payment[];
 };
 
+type Linea = {
+  note_id: string;
+  sequence_number: number;
+  note_date: string;
+  currency_mode: string;
+  display_name: string;
+  code: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+};
+
+type Busqueda = {
+  unidades: number;
+  notas: number;
+  lineas_count: number;
+  total_usd: number;
+  primera_fecha: string | null;
+  ultima_fecha: string | null;
+  ultimo_precio: number | null;
+  por_mes: { mes: string; unidades: number; total: number }[];
+  lineas: Linea[];
+};
+
 const MESES_CORTOS = [
   "ene", "feb", "mar", "abr", "may", "jun",
   "jul", "ago", "sep", "oct", "nov", "dic",
 ];
 
+const MESES_LARGOS = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+const DIAS_LARGOS = [
+  "domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado",
+];
+
 const DIAS_CORTOS = ["dom", "lun", "mar", "mie", "jue", "vie", "sab"];
 
-const CURRENCIES = [
-  { key: "USD", label: "dolares", dot: "bg-emerald-500", text: "text-emerald-700" },
-  { key: "COP", label: "pesos", dot: "bg-violet-500", text: "text-violet-700" },
-  { key: "BS_BINANCE", label: "Bs Binance", dot: "bg-yellow-400", text: "text-yellow-700" },
-  { key: "BS_BCV", label: "Bs BCV", dot: "bg-blue-500", text: "text-blue-700" },
+type Moneda = {
+  key: string;
+  label: string;
+  largo: string;
+  pill: string;
+  corto: string;
+};
+
+const MONEDAS: Moneda[] = [
+  { key: "USD", label: "dolares", largo: "dolares", pill: "bg-emerald-50 text-emerald-800", corto: "USD" },
+  { key: "COP", label: "pesos", largo: "pesos colombianos", pill: "bg-violet-50 text-violet-800", corto: "COP" },
+  { key: "BS_BINANCE", label: "Bs Binance", largo: "bolivares tasa Binance", pill: "bg-amber-50 text-amber-800", corto: "Bs" },
+  { key: "BS_BCV", label: "Bs BCV", largo: "bolivares tasa BCV", pill: "bg-blue-50 text-blue-800", corto: "Bs" },
 ];
 
 const ESTADOS = [
@@ -71,21 +113,29 @@ const ESTADOS = [
   { key: "ANULADO", label: "anuladas" },
 ];
 
-function tone(mode: string) {
-  return CURRENCIES.find((c) => c.key === mode) ?? CURRENCIES[0];
+function moneda(mode: string): Moneda {
+  return MONEDAS.find((m) => m.key === mode) ?? MONEDAS[0];
 }
 
 function money(n: number) {
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (n ?? 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
-function currencyShort(mode: string) {
-  return mode === "COP" ? "COP" : mode === "USD" ? "USD" : "Bs";
+function miles(n: number) {
+  return Math.round(n ?? 0).toLocaleString("en-US");
 }
 
 function effectiveRate(mode: string, rate: number | null, gap: number | null) {
   if (mode === "BS_BCV") return (rate ?? 0) * (1 + (gap ?? 0) / 100);
   return rate ?? 0;
+}
+
+function fechaLarga(iso: string) {
+  const d = new Date(iso + "T00:00:00");
+  return `${DIAS_LARGOS[d.getDay()]} ${d.getDate()} de ${MESES_LARGOS[d.getMonth()]}`;
 }
 
 export default function NotasPage() {
@@ -98,10 +148,15 @@ export default function NotasPage() {
   const [month, setMonth] = useState<number | null>(null);
   const [quarter, setQuarter] = useState<number | null>(null);
   const [estados, setEstados] = useState<string[]>(["PENDIENTE", "ABONADA", "COBRADO"]);
-  const [monedas, setMonedas] = useState<string[]>([]);
+  const [verGanancia, setVerGanancia] = useState(false);
+  const [showCols, setShowCols] = useState(false);
+
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const dragging = useRef(false);
+  const dragAdds = useRef(true);
 
   const [abonarId, setAbonarId] = useState<string | null>(null);
+  const [showBuscar, setShowBuscar] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -111,16 +166,24 @@ export default function NotasPage() {
       setError(error.message);
       return;
     }
-    const rows = (data ?? []) as NoteRow[];
-    setNotes(rows);
-    if (!year && rows.length > 0) {
-      setYear(rows[0].note_date.slice(0, 4));
-    }
-  }, [year]);
+    setNotes((data ?? []) as NoteRow[]);
+  }, []);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!year && notes.length > 0) setYear(notes[0].note_date.slice(0, 4));
+  }, [notes, year]);
+
+  useEffect(() => {
+    function up() {
+      dragging.current = false;
+    }
+    window.addEventListener("mouseup", up);
+    return () => window.removeEventListener("mouseup", up);
+  }, []);
 
   const years = useMemo(() => {
     const s = new Set<string>();
@@ -142,22 +205,23 @@ export default function NotasPage() {
     setEstados((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
   }
 
-  function toggleMoneda(k: string) {
-    setMonedas((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
-  }
-
-  function toggleSel(id: string) {
+  function setSel(id: string, on: boolean) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (on) next.add(id);
+      else next.delete(id);
       return next;
     });
   }
 
+  // notas del año (base para el total anual)
+  const delAnio = useMemo(
+    () => notes.filter((n) => !year || n.note_date.slice(0, 4) === year),
+    [notes, year]
+  );
+
   const filtered = useMemo(() => {
-    let list = notes;
-    if (year) list = list.filter((n) => n.note_date.slice(0, 4) === year);
+    let list = delAnio;
     if (month !== null) {
       list = list.filter((n) => Number(n.note_date.slice(5, 7)) - 1 === month);
     } else if (quarter !== null) {
@@ -169,9 +233,6 @@ export default function NotasPage() {
     if (estados.length > 0 && estados.length < ESTADOS.length) {
       list = list.filter((n) => estados.includes(n.effective_status));
     }
-    if (monedas.length > 0) {
-      list = list.filter((n) => monedas.includes(n.currency_mode));
-    }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(
@@ -181,31 +242,41 @@ export default function NotasPage() {
       );
     }
     return list;
-  }, [notes, year, month, quarter, estados, monedas, search]);
+  }, [delAnio, month, quarter, estados, search]);
 
   const totals = useMemo(() => {
-    let total = 0;
-    let pendiente = 0;
-    let ganancia = 0;
-    for (const n of filtered) {
-      if (n.effective_status === "ANULADO") continue;
-      total += n.total;
-      pendiente += n.pending_usd;
-      ganancia += n.total - n.total_cost;
-    }
+    const vivo = (n: NoteRow) => n.effective_status !== "ANULADO";
+    const anio = delAnio.filter(vivo).reduce((s, n) => s + n.total, 0);
+    const mes = filtered.filter(vivo).reduce((s, n) => s + n.total, 0);
+    const porCobrar = delAnio.filter(vivo).reduce((s, n) => s + n.pending_usd, 0);
     let sel = 0;
-    for (const n of filtered) if (selected.has(n.id)) sel += n.total;
-    return { total, pendiente, ganancia, sel };
-  }, [filtered, selected]);
+    let selCount = 0;
+    for (const n of filtered) {
+      if (selected.has(n.id)) {
+        sel += n.total;
+        selCount++;
+      }
+    }
+    return { anio, mes, porCobrar, sel, selCount };
+  }, [delAnio, filtered, selected]);
+
+  const etiquetaPeriodo =
+    month !== null
+      ? MESES_LARGOS[month]
+      : quarter !== null
+      ? `trimestre ${quarter + 1}`
+      : "todo el año";
 
   const abonarNote = notes.find((n) => n.id === abonarId) ?? null;
 
   return (
-    <main className="p-6 max-w-[1180px]">
+    <main className="p-6 max-w-[1150px]">
       <div className="flex items-end justify-between mb-4">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Notas</h1>
-          <p className="text-sm text-gray-500">{filtered.length} notas en la vista</p>
+          <p className="text-sm text-gray-500">
+            {filtered.length} notas · {etiquetaPeriodo}
+          </p>
         </div>
         <Link
           href="/notas/nueva"
@@ -222,248 +293,327 @@ export default function NotasPage() {
       )}
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex">
-        {/* ---------- barra lateral ---------- */}
-        <aside className="w-[140px] shrink-0 border-r border-gray-100 p-3">
-          <p className="text-[11px] text-gray-400 mb-1.5">Año</p>
+        {/* ---------- columna de periodos ---------- */}
+        <aside className="w-[118px] shrink-0 border-r border-gray-100 p-2.5 select-none">
           <select
             value={year}
             onChange={(e) => {
               setYear(e.target.value);
               setMonth(null);
               setQuarter(null);
+              setSelected(new Set());
             }}
-            className="w-full h-8 px-2 border border-gray-200 rounded-lg text-[13px] mb-4"
+            className="w-full h-7 px-1.5 border border-gray-200 rounded-lg text-xs mb-2.5"
           >
             {years.map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
 
-          <p className="text-[11px] text-gray-400 mb-1.5">Mes</p>
-          <div className="grid grid-cols-3 gap-[3px] mb-2">
-            {MESES_CORTOS.map((m, i) => (
-              <button
-                key={m}
-                onClick={() => {
-                  setQuarter(null);
-                  setMonth(month === i ? null : i);
-                }}
-                className={`text-[11px] py-1 rounded ${
-                  month === i
-                    ? "bg-gray-900 text-white"
-                    : "text-gray-500 hover:bg-gray-100"
-                }`}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-          <div className="grid grid-cols-4 gap-[3px] mb-4">
-            {[0, 1, 2, 3].map((q) => (
-              <button
-                key={q}
-                onClick={() => {
-                  setMonth(null);
-                  setQuarter(quarter === q ? null : q);
-                }}
-                className={`text-[11px] py-1 rounded ${
-                  quarter === q
-                    ? "bg-gray-900 text-white"
-                    : "text-gray-400 hover:bg-gray-100"
-                }`}
-              >
-                {q + 1}T
-              </button>
-            ))}
+          <div className="flex gap-1.5">
+            <div className="flex-1">
+              {MESES_CORTOS.map((m, i) => (
+                <button
+                  key={m}
+                  onClick={() => {
+                    setQuarter(null);
+                    setMonth(month === i ? null : i);
+                    setSelected(new Set());
+                  }}
+                  className={`block w-full text-left text-[11.5px] px-1.5 py-[3px] rounded ${
+                    month === i
+                      ? "bg-gray-900 text-white"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+            <div className="w-6 border-l border-gray-100 pl-1">
+              {[0, 1, 2, 3].map((q) => (
+                <button
+                  key={q}
+                  onClick={() => {
+                    setMonth(null);
+                    setQuarter(quarter === q ? null : q);
+                    setSelected(new Set());
+                  }}
+                  className={`block w-full text-center text-[10.5px] py-[2px] rounded ${
+                    quarter === q
+                      ? "bg-gray-900 text-white"
+                      : "text-gray-400 hover:bg-gray-100"
+                  }`}
+                  style={{ marginTop: q === 0 ? 11 : 31 }}
+                >
+                  {q + 1}T
+                </button>
+              ))}
+            </div>
           </div>
 
-          <p className="text-[11px] text-gray-400 mb-1.5">Estado</p>
+          <div className="h-px bg-gray-100 my-2.5" />
+
           {ESTADOS.map((e) => (
-            <label key={e.key} className="flex items-center gap-2 text-xs mb-1.5 cursor-pointer">
+            <label
+              key={e.key}
+              className="flex items-center gap-1.5 text-[11.5px] mb-1 cursor-pointer text-gray-600"
+            >
               <input
                 type="checkbox"
                 checked={estados.includes(e.key)}
                 onChange={() => toggleEstado(e.key)}
-                className="w-3.5 h-3.5"
+                className="w-3 h-3"
               />
-              <span className="text-gray-600">{e.label}</span>
+              {e.label}
             </label>
           ))}
 
-          <p className="text-[11px] text-gray-400 mt-4 mb-1.5">Moneda</p>
-          <div className="flex gap-1.5">
-            {CURRENCIES.map((c) => (
-              <button
-                key={c.key}
-                onClick={() => toggleMoneda(c.key)}
-                title={c.label}
-                className={`w-4 h-4 rounded-full ${c.dot} ${
-                  monedas.length === 0 || monedas.includes(c.key)
-                    ? "opacity-100"
-                    : "opacity-25"
-                }`}
-              />
-            ))}
-          </div>
-
-          {(month !== null || quarter !== null || monedas.length > 0) && (
+          {(month !== null || quarter !== null) && (
             <button
               onClick={() => {
                 setMonth(null);
                 setQuarter(null);
-                setMonedas([]);
               }}
-              className="mt-4 text-[11px] text-gray-400 hover:text-gray-700 underline"
+              className="mt-2.5 text-[10.5px] text-gray-400 hover:text-gray-700 underline"
             >
-              limpiar filtros
+              ver todo el año
             </button>
           )}
         </aside>
 
         {/* ---------- tabla ---------- */}
-        <section className="flex-1 min-w-0 p-3">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por cliente o numero de nota"
-            className="w-full h-8 px-3 border border-gray-200 rounded-lg text-[13px] mb-2"
-          />
-
-          <div className="flex gap-2 px-1.5 py-1.5 border-b border-gray-100 text-[11px] text-gray-400">
-            <span className="w-4" />
-            <span className="w-10">nº</span>
-            <span className="w-14">fecha</span>
-            <span className="flex-1 min-w-0">cliente</span>
-            <span className="w-20 text-right">total</span>
-            <span className="w-24">cobro</span>
-            <span className="w-16 text-right">ganancia</span>
+        <section className="flex-1 min-w-0">
+          <div className="flex gap-2 p-2.5 border-b border-gray-100">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cliente o numero de nota"
+              className="flex-1 h-7 px-2.5 border border-gray-200 rounded-lg text-[12.5px]"
+            />
+            <button
+              onClick={() => setShowBuscar(true)}
+              className="h-7 px-2.5 rounded-lg border border-gray-200 text-[11.5px] text-gray-700 hover:bg-gray-50"
+            >
+              busqueda profunda
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowCols((v) => !v)}
+                className="h-7 px-2.5 rounded-lg border border-gray-200 text-[11.5px] text-gray-700 hover:bg-gray-50"
+              >
+                columnas
+              </button>
+              {showCols && (
+                <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-2.5 w-44">
+                  <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={verGanancia}
+                      onChange={(e) => setVerGanancia(e.target.checked)}
+                      className="w-3 h-3"
+                    />
+                    mostrar ganancia
+                  </label>
+                  <p className="text-[10px] text-gray-400 mt-1.5">
+                    Se guarda apagada. La rentabilidad tambien esta dentro de cada nota.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
-          {loading && <p className="text-sm text-gray-400 py-4">Cargando...</p>}
+          <div className="flex gap-2.5 px-3 py-1.5 border-b border-gray-100 text-[10.5px] text-gray-400">
+            <span className="w-3.5" />
+            <span className="w-8">nº</span>
+            <span className="w-12">fecha</span>
+            <span className="flex-1 min-w-0">cliente</span>
+            <span className="w-14">cobro</span>
+            {verGanancia && <span className="w-14 text-right">ganancia</span>}
+            <span className="w-[124px] text-right">monto</span>
+          </div>
+
+          {loading && <p className="text-sm text-gray-400 p-4">Cargando...</p>}
 
           {!loading && filtered.length === 0 && (
-            <p className="text-sm text-gray-400 py-6">No hay notas que coincidan.</p>
+            <p className="text-sm text-gray-400 p-6">No hay notas que coincidan.</p>
           )}
 
-          {filtered.map((n) => {
-            const t = tone(n.currency_mode);
-            const profit = n.total - n.total_cost;
-            const pct = n.total > 0 ? Math.min((n.paid_usd / n.total) * 100, 100) : 0;
-            const anulada = n.effective_status === "ANULADO";
-            const d = new Date(n.note_date + "T00:00:00");
-            return (
-              <div
-                key={n.id}
-                className={`group flex gap-2 items-center px-1.5 py-1.5 border-b border-gray-50 text-[12.5px] hover:bg-gray-50 ${
-                  selected.has(n.id) ? "bg-gray-50" : ""
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.has(n.id)}
-                  onChange={() => toggleSel(n.id)}
-                  className="w-3.5 h-3.5 shrink-0"
-                />
-                <span className="w-10 text-[11px] text-gray-400 font-mono shrink-0">
-                  {n.sequence_number}
-                </span>
-                <span className="w-14 text-gray-500 shrink-0">
-                  {DIAS_CORTOS[d.getDay()]} {d.getDate()}
-                </span>
-                <span className="flex-1 min-w-0 truncate">
-                  <Link
-                    href={`/notas/nueva?id=${n.id}`}
-                    className={
-                      anulada
-                        ? "text-gray-400 line-through"
-                        : "text-gray-800 hover:text-gray-950 hover:underline"
-                    }
-                  >
-                    {n.display_name}
-                  </Link>
-                  {n.days_overdue > 0 && (
-                    <span className="ml-2 text-[10px] text-red-600">
-                      vencida {n.days_overdue}d
+          <div className="select-none">
+            {filtered.map((n) => {
+              const m = moneda(n.currency_mode);
+              const pct = n.total > 0 ? Math.min((n.paid_usd / n.total) * 100, 100) : 0;
+              const anulada = n.effective_status === "ANULADO";
+              const d = new Date(n.note_date + "T00:00:00");
+              const tasa = effectiveRate(n.currency_mode, n.exchange_rate, n.exchange_gap_percent);
+              const profit = n.total - n.total_cost;
+              const isSel = selected.has(n.id);
+              return (
+                <div
+                  key={n.id}
+                  onMouseDown={(e) => {
+                    if ((e.target as HTMLElement).closest("a,button")) return;
+                    dragging.current = true;
+                    dragAdds.current = !isSel;
+                    setSel(n.id, !isSel);
+                  }}
+                  onMouseEnter={() => {
+                    if (dragging.current) setSel(n.id, dragAdds.current);
+                  }}
+                  className={`group relative flex gap-2.5 items-center px-3 py-[7px] border-b border-gray-50 text-[12.5px] cursor-default ${
+                    isSel ? "bg-indigo-50/60" : "hover:bg-gray-50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSel}
+                    onChange={() => setSel(n.id, !isSel)}
+                    className="w-3 h-3 shrink-0"
+                  />
+                  <span className="w-8 text-[10.5px] text-gray-400 font-mono shrink-0">
+                    {n.sequence_number}
+                  </span>
+                  <span className="w-12 text-gray-500 shrink-0">
+                    {DIAS_CORTOS[d.getDay()]} {d.getDate()}
+                  </span>
+                  <span className="flex-1 min-w-0 truncate">
+                    <span className={anulada ? "text-gray-400 line-through" : "text-gray-800"}>
+                      {n.display_name}
                     </span>
-                  )}
-                </span>
-                <span className={`w-20 text-right shrink-0 ${anulada ? "text-gray-400" : t.text}`}>
-                  {money(n.total)}
-                </span>
-                <span className="w-24 shrink-0 flex items-center gap-1.5">
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${t.dot}`} />
-                  <span className="flex-1 h-[3px] bg-gray-100 rounded-full overflow-hidden">
+                    {n.days_overdue > 0 && (
+                      <span className="ml-2 text-[10px] text-red-600">
+                        vencida {n.days_overdue}d
+                      </span>
+                    )}
+                  </span>
+                  <span className="w-14 shrink-0 h-[3px] bg-gray-100 rounded-full overflow-hidden">
                     <span
                       className="block h-full bg-emerald-500"
                       style={{ width: `${pct}%` }}
                     />
                   </span>
-                  {n.pending_usd > 0.005 && !anulada && (
-                    <span className="text-[10px] text-gray-400 shrink-0">
-                      {Math.round(pct)}%
+                  {verGanancia && (
+                    <span
+                      className={`w-14 text-right shrink-0 ${
+                        profit < 0 ? "text-red-600" : "text-emerald-700"
+                      }`}
+                    >
+                      {money(profit)}
                     </span>
                   )}
-                </span>
-                <span
-                  className={`w-16 text-right shrink-0 ${
-                    anulada
-                      ? "text-gray-400"
-                      : profit < 0
-                      ? "text-red-600"
-                      : "text-emerald-700"
-                  }`}
-                >
-                  {money(profit)}
-                </span>
-                <span className="w-24 shrink-0 flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                  {!anulada && n.pending_usd > 0.005 && (
-                    <button
-                      onClick={() => setAbonarId(n.id)}
-                      className="text-[11px] text-emerald-700 hover:underline"
-                    >
-                      abonar
-                    </button>
-                  )}
-                  <Link
-                    href={`/notas/ver?id=${n.id}`}
-                    className="text-[11px] text-gray-400 hover:text-gray-900"
-                  >
-                    ver
-                  </Link>
-                  <button
-                    onClick={() => handleDelete(n.id)}
-                    className="text-[11px] text-gray-300 hover:text-red-600"
-                  >
-                    borrar
-                  </button>
-                </span>
-              </div>
-            );
-          })}
-        </section>
-      </div>
+                  <span className="w-[124px] shrink-0 flex items-center justify-end gap-1.5">
+                    <span className={`text-[10.5px] px-1.5 py-[1px] rounded-full ${m.pill}`}>
+                      {m.label}
+                    </span>
+                    <span className={`w-14 text-right ${anulada ? "text-gray-400" : ""}`}>
+                      {money(n.total)}
+                    </span>
+                  </span>
 
-      {/* ---------- pie de totales ---------- */}
-      <div className="flex items-center gap-5 px-4 py-2.5 text-xs text-gray-500">
-        {selected.size > 0 ? (
-          <span>
-            {selected.size} seleccionadas ·{" "}
-            <span className="text-gray-900 font-medium">${money(totals.sel)}</span>
-          </span>
-        ) : (
-          <span>pasa el puntero sobre una nota para abonar o ver</span>
-        )}
-        <span className="ml-auto">
-          total <span className="text-gray-900 font-medium">${money(totals.total)}</span>
-        </span>
-        <span>
-          por cobrar{" "}
-          <span className="text-amber-700 font-medium">${money(totals.pendiente)}</span>
-        </span>
-        <span>
-          ganancia{" "}
-          <span className="text-emerald-700 font-medium">${money(totals.ganancia)}</span>
-        </span>
+                  {/* cuadro de detalle */}
+                  <div className="hidden group-hover:block absolute right-3 top-full mt-1 z-30 w-[290px] bg-gray-800 rounded-xl px-3.5 py-3 shadow-xl">
+                    <Fila k="Fecha" v={fechaLarga(n.note_date)} />
+                    <Fila k="Moneda" v={m.largo} />
+                    {n.currency_mode !== "USD" && (
+                      <>
+                        <Fila
+                          k="Tasa usada"
+                          v={
+                            tasa > 0
+                              ? tasa.toLocaleString("en-US", { maximumFractionDigits: 4 })
+                              : "sin tasa"
+                          }
+                        />
+                        <Fila
+                          k={`Cobrado en ${m.corto}`}
+                          v={tasa > 0 ? miles(n.total * tasa) : "—"}
+                        />
+                      </>
+                    )}
+                    {n.discount > 0 && <Fila k="Descuento" v={`$${money(n.discount)}`} />}
+                    <div className="h-px bg-gray-600 my-1.5" />
+                    <Fila k="Abonado" v={`$${money(n.paid_usd)}`} tone="text-emerald-300" />
+                    <Fila
+                      k="Falta"
+                      v={n.pending_usd > 0.005 ? `$${money(n.pending_usd)}` : "nada, cobrada"}
+                      tone={n.pending_usd > 0.005 ? "text-red-300" : "text-emerald-300"}
+                    />
+                    {n.due_date && n.pending_usd > 0.005 && (
+                      <Fila
+                        k="Vence"
+                        v={
+                          n.days_overdue > 0
+                            ? `${n.due_date} · vencida ${n.days_overdue}d`
+                            : n.due_date
+                        }
+                        tone={n.days_overdue > 0 ? "text-red-300" : "text-gray-200"}
+                      />
+                    )}
+                    <div className="flex gap-3 mt-2">
+                      {!anulada && n.pending_usd > 0.005 && (
+                        <button
+                          onClick={() => setAbonarId(n.id)}
+                          className="text-[11px] text-emerald-300 hover:text-emerald-200"
+                        >
+                          abonar
+                        </button>
+                      )}
+                      <Link
+                        href={`/notas/ver?id=${n.id}`}
+                        className="text-[11px] text-gray-300 hover:text-white"
+                      >
+                        ver
+                      </Link>
+                      <Link
+                        href={`/notas/nueva?id=${n.id}`}
+                        className="text-[11px] text-gray-300 hover:text-white"
+                      >
+                        editar
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(n.id)}
+                        className="text-[11px] text-gray-500 hover:text-red-300 ml-auto"
+                      >
+                        borrar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ---------- pie ---------- */}
+          <div className="flex items-center gap-3 px-3 py-2 border-t border-gray-200 bg-gray-50 text-[11.5px]">
+            {totals.selCount > 0 ? (
+              <span className="text-indigo-700">
+                {totals.selCount} seleccionadas{" "}
+                <b className="font-medium">${money(totals.sel)}</b>
+                <button
+                  onClick={() => setSelected(new Set())}
+                  className="ml-2 text-gray-400 hover:text-gray-700 underline"
+                >
+                  quitar
+                </button>
+              </span>
+            ) : (
+              <span className="text-gray-400">
+                arrastra sobre las filas para ir sumando
+              </span>
+            )}
+            <span className="ml-auto text-gray-500">
+              {month !== null ? MESES_CORTOS[month] : quarter !== null ? `${quarter + 1}T` : "periodo"}{" "}
+              <b className="font-medium text-gray-900">${miles(totals.mes)}</b>
+            </span>
+            <span className="text-gray-500">
+              año <b className="font-medium text-gray-900">${miles(totals.anio)}</b>
+            </span>
+            <span className="text-gray-500">
+              por cobrar{" "}
+              <b className="font-medium text-amber-700">${miles(totals.porCobrar)}</b>
+            </span>
+          </div>
+        </section>
       </div>
 
       {abonarId && abonarNote && (
@@ -482,7 +632,18 @@ export default function NotasPage() {
           }}
         />
       )}
+
+      {showBuscar && <BusquedaModal onClose={() => setShowBuscar(false)} />}
     </main>
+  );
+}
+
+function Fila({ k, v, tone }: { k: string; v: string; tone?: string }) {
+  return (
+    <div className="flex justify-between text-[12px] py-[2px]">
+      <span className="text-gray-400">{k}</span>
+      <span className={tone ?? "text-gray-100"}>{v}</span>
+    </div>
   );
 }
 
@@ -506,7 +667,7 @@ function AbonarModal({
   const [err, setErr] = useState<string | null>(null);
 
   const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
-  const [moneda, setMoneda] = useState(defaultCurrency);
+  const [mon, setMon] = useState(defaultCurrency);
   const [monto, setMonto] = useState("");
   const [tasa, setTasa] = useState(defaultRate > 0 ? String(defaultRate) : "");
   const [metodo, setMetodo] = useState("");
@@ -527,7 +688,7 @@ function AbonarModal({
 
   const montoNum = Number(monto.replace(",", ".")) || 0;
   const tasaNum = Number(tasa.replace(",", ".")) || 0;
-  const equivale = moneda === "USD" ? montoNum : tasaNum > 0 ? montoNum / tasaNum : 0;
+  const equivale = mon === "USD" ? montoNum : tasaNum > 0 ? montoNum / tasaNum : 0;
   const quedaria = col ? Math.max(col.pending - equivale, 0) : 0;
 
   async function guardar() {
@@ -536,7 +697,7 @@ function AbonarModal({
       setErr("Escribe el monto del abono.");
       return;
     }
-    if (moneda !== "USD" && tasaNum <= 0) {
+    if (mon !== "USD" && tasaNum <= 0) {
       setErr("Falta la tasa de cambio.");
       return;
     }
@@ -544,9 +705,9 @@ function AbonarModal({
     const { error } = await supabase.rpc("add_note_payment", {
       p_note_id: noteId,
       p_payment_date: fecha,
-      p_currency_mode: moneda,
+      p_currency_mode: mon,
       p_amount_currency: montoNum,
-      p_exchange_rate: moneda === "USD" ? null : tasaNum,
+      p_exchange_rate: mon === "USD" ? null : tasaNum,
       p_method: metodo || null,
       p_reference: refe || null,
     });
@@ -577,14 +738,13 @@ function AbonarModal({
         className="bg-white rounded-xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-baseline justify-between mb-4">
+        <div className="flex items-baseline justify-between mb-3">
           <h2 className="text-base font-semibold text-gray-900">
             Abonar {col ? `· nota ${col.sequence_number}` : ""}
           </h2>
           {col && (
             <span className="text-xs text-gray-500">
-              falta{" "}
-              <b className="text-red-600 font-medium">${money(col.pending)}</b> de $
+              falta <b className="text-red-600 font-medium">${money(col.pending)}</b> de $
               {money(col.total)}
             </span>
           )}
@@ -605,12 +765,12 @@ function AbonarModal({
           <div>
             <label className="block text-[11px] text-gray-500 mb-1">Recibí en</label>
             <select
-              value={moneda}
-              onChange={(e) => setMoneda(e.target.value)}
+              value={mon}
+              onChange={(e) => setMon(e.target.value)}
               className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-sm"
             >
-              {CURRENCIES.map((c) => (
-                <option key={c.key} value={c.key}>{c.label}</option>
+              {MONEDAS.map((c) => (
+                <option key={c.key} value={c.key}>{c.largo}</option>
               ))}
             </select>
           </div>
@@ -625,12 +785,12 @@ function AbonarModal({
           </div>
           <div>
             <label className="block text-[11px] text-gray-500 mb-1">
-              Tasa {moneda === "USD" && <span className="text-gray-300">(no aplica)</span>}
+              Tasa {mon === "USD" && <span className="text-gray-300">(no aplica)</span>}
             </label>
             <input
-              value={moneda === "USD" ? "" : tasa}
+              value={mon === "USD" ? "" : tasa}
               onChange={(e) => setTasa(e.target.value)}
-              disabled={moneda === "USD"}
+              disabled={mon === "USD"}
               placeholder="0"
               className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-sm disabled:bg-gray-50"
             />
@@ -639,8 +799,8 @@ function AbonarModal({
 
         {montoNum > 0 && col && (
           <div className="mb-3 p-2.5 rounded-lg bg-emerald-50 text-sm text-emerald-800">
-            Equivale a <b className="font-medium">${money(equivale)}</b> — la nota quedaría
-            en <b className="font-medium">${money(quedaria)}</b> pendiente
+            Equivale a <b className="font-medium">${money(equivale)}</b> — la nota quedaría en{" "}
+            <b className="font-medium">${money(quedaria)}</b> pendiente
             {quedaria <= 0.005 && <span className="ml-1">(cobrada completa)</span>}
           </div>
         )}
@@ -660,9 +820,7 @@ function AbonarModal({
           />
         </div>
 
-        {err && (
-          <p className="mb-3 text-sm text-red-600">{err}</p>
-        )}
+        {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
 
         <div className="flex gap-2 mb-5">
           <button
@@ -689,7 +847,7 @@ function AbonarModal({
                 className="group flex items-center justify-between text-[13px] py-1.5"
               >
                 <span className={p.voided ? "text-gray-300 line-through" : "text-gray-500"}>
-                  {p.payment_date} · {currencyShort(p.currency_mode)}{" "}
+                  {p.payment_date} · {moneda(p.currency_mode).corto}{" "}
                   {money(p.amount_currency)}
                   {p.method ? ` · ${p.method}` : ""}
                 </span>
@@ -709,6 +867,215 @@ function AbonarModal({
               </div>
             ))}
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ================= ventana de busqueda profunda ================= */
+
+function BusquedaModal({ onClose }: { onClose: () => void }) {
+  const [clientes, setClientes] = useState<{ id: string; name: string }[]>([]);
+  const [clienteId, setClienteId] = useState("");
+  const [texto, setTexto] = useState("");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [res, setRes] = useState<Busqueda | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.rpc("clients_for_picker").then(({ data }) => {
+      setClientes((data ?? []) as { id: string; name: string }[]);
+    });
+  }, []);
+
+  async function buscar() {
+    setErr(null);
+    if (!clienteId && !texto.trim()) {
+      setErr("Elige un cliente o escribe un producto. Puedes usar solo uno de los dos.");
+      return;
+    }
+    setBusy(true);
+    const { data, error } = await supabase.rpc("deep_search", {
+      p_client_id: clienteId || null,
+      p_text: texto.trim(),
+      p_from: desde || null,
+      p_to: hasta || null,
+    });
+    setBusy(false);
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+    setRes(data as Busqueda);
+  }
+
+  const maxMes = useMemo(() => {
+    if (!res || res.por_mes.length === 0) return 0;
+    return Math.max(...res.por_mes.map((m) => m.unidades));
+  }, [res]);
+
+  const clienteNombre = clientes.find((c) => c.id === clienteId)?.name ?? "";
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/45 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-base font-semibold text-gray-900">Busqueda profunda</h2>
+          <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-900">
+            cerrar
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">
+          Busca que le vendiste a quien. Puedes llenar uno solo de los dos campos.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1">Cliente</label>
+            <select
+              value={clienteId}
+              onChange={(e) => setClienteId(e.target.value)}
+              className="w-full h-9 px-2 border border-gray-300 rounded-lg text-sm"
+            >
+              <option value="">Todos los clientes</option>
+              {clientes.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1">
+              Producto: codigo o nombre
+            </label>
+            <input
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") buscar();
+              }}
+              placeholder="330REPOTEN o cruceta GUT-20"
+              className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 items-center mb-4">
+          <span className="text-[11px] text-gray-400">desde</span>
+          <input
+            type="date"
+            value={desde}
+            onChange={(e) => setDesde(e.target.value)}
+            className="h-8 px-2 border border-gray-200 rounded-lg text-xs"
+          />
+          <span className="text-[11px] text-gray-400">hasta</span>
+          <input
+            type="date"
+            value={hasta}
+            onChange={(e) => setHasta(e.target.value)}
+            className="h-8 px-2 border border-gray-200 rounded-lg text-xs"
+          />
+          <button
+            onClick={buscar}
+            disabled={busy}
+            className="ml-auto px-4 h-8 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-700 disabled:opacity-50"
+          >
+            {busy ? "Buscando..." : "Buscar"}
+          </button>
+        </div>
+
+        {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
+
+        {res && res.lineas_count === 0 && (
+          <div className="p-3 rounded-lg bg-gray-50 text-sm text-gray-600">
+            No hay resultados. {clienteNombre && texto
+              ? `${clienteNombre} no ha llevado nada que coincida con "${texto}".`
+              : "Prueba con menos palabras o quita el rango de fechas."}
+          </div>
+        )}
+
+        {res && res.lineas_count > 0 && (
+          <>
+            <div className="p-2.5 rounded-lg bg-emerald-50 text-sm text-emerald-800 mb-3">
+              {clienteNombre ? "Si lo ha llevado: " : "Encontrado: "}
+              <b className="font-medium">{money(res.unidades)} unidades</b> en{" "}
+              <b className="font-medium">{res.notas} notas</b>
+              {res.primera_fecha && res.ultima_fecha && (
+                <> , entre {res.primera_fecha} y {res.ultima_fecha}</>
+              )}
+              {res.ultimo_precio != null && (
+                <>. Ultimo precio <b className="font-medium">${money(res.ultimo_precio)}</b></>
+              )}
+              . Total <b className="font-medium">${money(res.total_usd)}</b>
+            </div>
+
+            {res.por_mes.length > 1 && (
+              <div className="flex gap-1 items-end h-14 mb-4">
+                {res.por_mes.map((m) => (
+                  <div key={m.mes} className="flex-1 text-center group relative">
+                    <div
+                      className="bg-violet-300 group-hover:bg-violet-500 rounded-t transition-colors"
+                      style={{
+                        height: `${maxMes > 0 ? (m.unidades / maxMes) * 40 : 0}px`,
+                        minHeight: "2px",
+                      }}
+                    />
+                    <div className="text-[9.5px] text-gray-400 mt-1">
+                      {MESES_CORTOS[Number(m.mes.slice(5, 7)) - 1]}
+                    </div>
+                    <div className="hidden group-hover:block absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10">
+                      {money(m.unidades)} uds · ${money(m.total)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-2.5 px-1 py-1.5 border-b border-gray-100 text-[10.5px] text-gray-400">
+              <span className="w-14">fecha</span>
+              <span className="w-8">nota</span>
+              {!clienteId && <span className="w-28">cliente</span>}
+              <span className="flex-1 min-w-0">producto</span>
+              <span className="w-10 text-right">cant</span>
+              <span className="w-14 text-right">precio $</span>
+              <span className="w-14 text-right">total $</span>
+            </div>
+            {res.lineas.map((l, i) => (
+              <div
+                key={`${l.note_id}-${i}`}
+                className="flex gap-2.5 px-1 py-1.5 border-b border-gray-50 text-[12.5px]"
+              >
+                <span className="w-14 text-gray-500">{l.note_date}</span>
+                <Link
+                  href={`/notas/nueva?id=${l.note_id}`}
+                  className="w-8 text-indigo-600 hover:underline font-mono text-[10.5px]"
+                >
+                  {l.sequence_number}
+                </Link>
+                {!clienteId && (
+                  <span className="w-28 truncate text-gray-600">{l.display_name}</span>
+                )}
+                <span className="flex-1 min-w-0 truncate" title={l.description}>
+                  {l.description}
+                </span>
+                <span className="w-10 text-right">{money(l.quantity)}</span>
+                <span className="w-14 text-right">{money(l.unit_price)}</span>
+                <span className="w-14 text-right">{money(l.line_total)}</span>
+              </div>
+            ))}
+
+            <p className="text-[11px] text-gray-400 mt-3">
+              Todos los precios en dolares, sin importar en que moneda se hizo cada nota.
+            </p>
+          </>
         )}
       </div>
     </div>
