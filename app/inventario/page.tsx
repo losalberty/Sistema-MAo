@@ -52,6 +52,18 @@ type Kardex = {
   movimientos: Movimiento[];
 };
 
+type ProvInfo = {
+  habitual: { id: string; name: string } | null;
+  historial: {
+    supplier_id: string;
+    name: string;
+    veces: number;
+    ultima_fecha: string;
+    ultimo_costo: number;
+    unidades: number;
+  }[];
+};
+
 type PreviewRow = {
   code: string;
   quantity: number;
@@ -101,6 +113,11 @@ export default function InventarioPage() {
   const [showImport, setShowImport] = useState(false);
   const [minimo, setMinimo] = useState("");
 
+  const [grupos, setGrupos] = useState<{ category: string; total: number }[]>([]);
+  const [provs, setProvs] = useState<{ id: string; name: string; total: number }[]>([]);
+  const [sugDias, setSugDias] = useState("15");
+  const [aviso, setAviso] = useState<string | null>(null);
+
   const cargar = useCallback(async () => {
     setCargando(true);
     const [r1, r2] = await Promise.all([
@@ -121,6 +138,49 @@ export default function InventarioPage() {
     const t = setTimeout(cargar, 250);
     return () => clearTimeout(t);
   }, [cargar]);
+
+  useEffect(() => {
+    supabase.rpc("list_categories").then(({ data }) => {
+      setGrupos((data ?? []) as { category: string; total: number }[]);
+    });
+    supabase.rpc("list_suppliers").then(({ data }) => {
+      setProvs((data ?? []) as { id: string; name: string; total: number }[]);
+    });
+  }, []);
+
+  async function seleccionarPor(campo: "grupo" | "proveedor", valor: string) {
+    if (!valor) return;
+    const { data, error } = await supabase.rpc("stock_ids_by", {
+      p_category: campo === "grupo" ? valor : null,
+      p_supplier_id: campo === "proveedor" ? valor : null,
+      p_supply_type: null,
+    });
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    const ids = ((data ?? []) as { id: string }[]).map((x) => x.id);
+    setSel(new Set(ids));
+    setAviso(`${ids.length} productos seleccionados`);
+  }
+
+  async function sugerirMinimos() {
+    const dias = Number(sugDias) || 15;
+    const ids = sel.size > 0 ? Array.from(sel) : null;
+    const { data, error } = await supabase.rpc("suggest_min_stock", {
+      p_ids: ids,
+      p_dias_cobertura: dias,
+    });
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    const r = data as { actualizados: number };
+    setAviso(
+      `Minimos puestos en ${r.actualizados} productos, para aguantar ${dias} dias de venta.`
+    );
+    cargar();
+  }
 
   function toggleSel(id: string) {
     setSel((p) => {
@@ -227,14 +287,19 @@ export default function InventarioPage() {
             className="flex-1 h-8 px-2.5 border border-gray-200 rounded-lg text-[12.5px]"
           />
           {[
-            { k: "TODOS", l: "todos" },
-            { k: "REPONER", l: "reponer" },
-            { k: "AGOTADO", l: "agotados" },
-            { k: "PEDIDO", l: "bajo pedido" },
+            { k: "TODOS", l: "todos", t: "toda tu lista" },
+            {
+              k: "REPONER",
+              l: "por reponer",
+              t: "productos que bajaron de su minimo — hay que comprar",
+            },
+            { k: "AGOTADO", l: "agotados", t: "de almacen y en cero" },
+            { k: "PEDIDO", l: "bajo pedido", t: "los que le pides al proveedor" },
           ].map((f) => (
             <button
               key={f.k}
               onClick={() => setFiltro(f.k)}
+              title={f.t}
               className={`h-8 px-2.5 rounded-full text-[11.5px] border ${
                 filtro === f.k
                   ? "bg-gray-900 text-white border-gray-900"
@@ -245,6 +310,72 @@ export default function InventarioPage() {
             </button>
           ))}
         </div>
+
+        <div className="flex flex-wrap gap-2 items-center px-2.5 py-2 border-b border-gray-100 text-[11.5px]">
+          <span className="text-gray-400">seleccionar:</span>
+          <button
+            onClick={() => setSel(new Set(rows.map((r) => r.id)))}
+            className="px-2.5 h-7 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+          >
+            todo lo que veo ({rows.length})
+          </button>
+          <select
+            onChange={(e) => {
+              seleccionarPor("grupo", e.target.value);
+              e.target.value = "";
+            }}
+            defaultValue=""
+            className="h-7 px-2 border border-gray-200 rounded-lg text-[11.5px] text-gray-600"
+          >
+            <option value="">por grupo...</option>
+            {grupos.map((g) => (
+              <option key={g.category} value={g.category}>
+                {g.category} ({g.total})
+              </option>
+            ))}
+          </select>
+          <select
+            onChange={(e) => {
+              seleccionarPor("proveedor", e.target.value);
+              e.target.value = "";
+            }}
+            defaultValue=""
+            className="h-7 px-2 border border-gray-200 rounded-lg text-[11.5px] text-gray-600"
+          >
+            <option value="">por proveedor...</option>
+            {provs.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} ({p.total})
+              </option>
+            ))}
+          </select>
+
+          <span className="ml-auto text-gray-400">minimos:</span>
+          <input
+            value={sugDias}
+            onChange={(e) => setSugDias(e.target.value)}
+            className="w-12 h-7 px-2 border border-gray-200 rounded-lg text-[11.5px] text-center"
+          />
+          <span className="text-gray-400">dias de venta</span>
+          <button
+            onClick={sugerirMinimos}
+            className="px-2.5 h-7 rounded-lg bg-gray-900 text-white hover:bg-gray-700"
+          >
+            calcular {sel.size > 0 ? "para los seleccionados" : "para todos"}
+          </button>
+        </div>
+
+        {aviso && (
+          <div className="px-3 py-2 bg-emerald-50 border-b border-emerald-100 text-[12px] text-emerald-800 flex items-center">
+            {aviso}
+            <button
+              onClick={() => setAviso(null)}
+              className="ml-auto text-emerald-600 hover:text-emerald-900"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {sel.size > 0 && (
           <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border-b border-indigo-100 text-[12px]">
@@ -298,12 +429,44 @@ export default function InventarioPage() {
 
         {!cargando && rows.length === 0 && (
           <div className="p-8 text-center">
-            <p className="text-sm text-gray-500 mb-1">
-              No hay productos que coincidan.
-            </p>
-            <p className="text-xs text-gray-400">
-              Si aun no has cargado cantidades, usa el boton &quot;Cargar cantidades&quot;.
-            </p>
+            {filtro === "REPONER" ? (
+              <>
+                <p className="text-sm text-gray-700 mb-1">
+                  Ningun producto esta por debajo de su minimo.
+                </p>
+                <p className="text-xs text-gray-500 max-w-md mx-auto">
+                  Este filtro compara el stock contra el minimo de cada producto. Si
+                  todos tus minimos estan en cero, nunca va a mostrar nada. Usa el boton
+                  &quot;calcular&quot; de arriba y el sistema los pone segun lo que
+                  vendes.
+                </p>
+              </>
+            ) : filtro === "AGOTADO" ? (
+              <p className="text-sm text-gray-500">
+                No tienes productos de almacen en cero. Bien ahi.
+              </p>
+            ) : filtro === "PEDIDO" ? (
+              <>
+                <p className="text-sm text-gray-700 mb-1">
+                  Todavia no has marcado ningun producto como bajo pedido.
+                </p>
+                <p className="text-xs text-gray-500 max-w-md mx-auto">
+                  Selecciona los que no tienes en fisico y le pides al proveedor, y dale
+                  a &quot;marcar bajo pedido&quot;. Esos dejan de alertarte por estar en
+                  cero.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-500 mb-1">
+                  No hay productos que coincidan.
+                </p>
+                <p className="text-xs text-gray-400">
+                  Si aun no has cargado cantidades, usa el boton &quot;Cargar
+                  cantidades&quot;.
+                </p>
+              </>
+            )}
           </div>
         )}
 
@@ -323,12 +486,19 @@ export default function InventarioPage() {
               <span className="w-[86px] font-mono text-[10.5px] text-gray-500 shrink-0 truncate">
                 {r.code}
               </span>
-              <button
-                onClick={() => setKardexId(r.id)}
-                className="flex-1 min-w-0 truncate text-left text-gray-800 hover:text-indigo-700 hover:underline"
-              >
-                {r.description}
-              </button>
+              <span className="flex-1 min-w-0 truncate">
+                <button
+                  onClick={() => setKardexId(r.id)}
+                  className="text-gray-800 hover:text-indigo-700 hover:underline"
+                >
+                  {r.description}
+                </button>
+                {r.supplier_name && (
+                  <span className="ml-2 text-[10px] text-gray-400">
+                    {r.supplier_name}
+                  </span>
+                )}
+              </span>
               <span
                 className={`w-12 text-right shrink-0 ${
                   r.estado === "AGOTADO"
@@ -426,20 +596,22 @@ function KardexModal({
   onCambio: () => void;
 }) {
   const [k, setK] = useState<Kardex | null>(null);
+  const [provs, setProvs] = useState<ProvInfo | null>(null);
   const [nuevo, setNuevo] = useState("");
   const [motivo, setMotivo] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
-    const { data, error } = await supabase.rpc("product_moves", {
-      p_product_id: productId,
-      p_limit: 80,
-    });
-    if (error) {
-      setErr(error.message);
+    const [r1, r2] = await Promise.all([
+      supabase.rpc("product_moves", { p_product_id: productId, p_limit: 80 }),
+      supabase.rpc("product_suppliers", { p_product_id: productId }),
+    ]);
+    if (r1.error) {
+      setErr(r1.error.message);
       return;
     }
-    setK(data as Kardex);
+    setK(r1.data as Kardex);
+    if (!r2.error) setProvs(r2.data as ProvInfo);
   }, [productId]);
 
   useEffect(() => {
@@ -546,6 +718,50 @@ function KardexModal({
         </div>
 
         {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
+
+        {provs && (
+          <div className="mb-4 border border-gray-200 rounded-lg p-3">
+            <p className="text-[11px] text-gray-500 mb-2">
+              A quien le compras este repuesto
+            </p>
+            {provs.habitual ? (
+              <p className="text-[12.5px] mb-2">
+                Habitual:{" "}
+                <b className="font-medium">{provs.habitual.name}</b>
+              </p>
+            ) : (
+              <p className="text-[12.5px] text-gray-400 mb-2">
+                Sin proveedor habitual asignado
+              </p>
+            )}
+
+            {provs.historial.length === 0 ? (
+              <p className="text-[11.5px] text-gray-400">
+                Todavia no hay compras registradas de este producto.
+              </p>
+            ) : (
+              provs.historial.map((h) => (
+                <div
+                  key={h.supplier_id}
+                  className="flex gap-2 text-[12px] py-1 border-t border-gray-50"
+                >
+                  <span className="flex-1 min-w-0 truncate">{h.name}</span>
+                  <span className="text-gray-500">{h.veces}x</span>
+                  <span className="text-gray-500 w-20 text-right">
+                    {h.ultima_fecha}
+                  </span>
+                  <span className="w-16 text-right">
+                    ${money(h.ultimo_costo)}
+                  </span>
+                </div>
+              ))
+            )}
+            <p className="text-[10.5px] text-gray-400 mt-2">
+              Puedes comprarle a cualquiera. El habitual solo sirve para agrupar los
+              pedidos.
+            </p>
+          </div>
+        )}
 
         <div className="flex gap-2.5 px-1 py-1.5 border-b border-gray-100 text-[10.5px] text-gray-400">
           <span className="w-14">fecha</span>
