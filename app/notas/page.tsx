@@ -441,7 +441,7 @@ export default function NotasPage() {
           )}
 
           <div className="select-none">
-            {filtered.map((n) => {
+            {filtered.map((n, idx) => {
               const m = moneda(n.currency_mode);
               const pct = n.total > 0 ? Math.min((n.paid_usd / n.total) * 100, 100) : 0;
               const anulada = n.effective_status === "ANULADO";
@@ -449,6 +449,8 @@ export default function NotasPage() {
               const tasa = effectiveRate(n.currency_mode, n.exchange_rate, n.exchange_gap_percent);
               const profit = n.total - n.total_cost;
               const isSel = selected.has(n.id);
+              // en las ultimas filas el cuadro se abre hacia arriba
+              const haciaArriba = filtered.length > 4 && idx >= filtered.length - 4;
               return (
                 <div
                   key={n.id}
@@ -478,9 +480,16 @@ export default function NotasPage() {
                     {DIAS_CORTOS[d.getDay()]} {d.getDate()}
                   </span>
                   <span className="flex-1 min-w-0 truncate">
-                    <span className={anulada ? "text-gray-400 line-through" : "text-gray-800"}>
+                    <Link
+                      href={`/notas/nueva?id=${n.id}`}
+                      className={
+                        anulada
+                          ? "text-gray-400 line-through"
+                          : "text-gray-800 hover:text-indigo-700 hover:underline"
+                      }
+                    >
                       {n.display_name}
-                    </span>
+                    </Link>
                     {n.days_overdue > 0 && (
                       <span className="ml-2 text-[10px] text-red-600">
                         vencida {n.days_overdue}d
@@ -512,7 +521,11 @@ export default function NotasPage() {
                   </span>
 
                   {/* cuadro de detalle */}
-                  <div className="hidden group-hover:block absolute right-3 top-full mt-1 z-30 w-[290px] bg-gray-800 rounded-xl px-3.5 py-3 shadow-xl">
+                  <div
+                    className={`hidden group-hover:block absolute right-3 z-30 w-[290px] bg-gray-800 rounded-xl px-3.5 py-3 shadow-xl ${
+                      haciaArriba ? "bottom-full mb-1" : "top-full mt-1"
+                    }`}
+                  >
                     <Fila k="Fecha" v={fechaLarga(n.note_date)} />
                     <Fila k="Moneda" v={m.largo} />
                     {n.currency_mode !== "USD" && (
