@@ -25,6 +25,8 @@ type NoteRow = {
   payments_count: number;
   effective_status: string;
   days_overdue: number;
+  returned_usd: number;
+  credit_usd: number;
   created_at: string;
 };
 
@@ -42,6 +44,9 @@ type Payment = {
 
 type Collection = {
   total: number;
+  returned: number;
+  neto: number;
+  credit: number;
   paid: number;
   pending: number;
   currency_mode: string;
@@ -157,6 +162,7 @@ export default function NotasPage() {
   const dragAdds = useRef(true);
 
   const [abonarId, setAbonarId] = useState<string | null>(null);
+  const [devolverId, setDevolverId] = useState<string | null>(null);
   const [showBuscar, setShowBuscar] = useState(false);
 
   const load = useCallback(async () => {
@@ -495,6 +501,11 @@ export default function NotasPage() {
                         vencida {n.days_overdue}d
                       </span>
                     )}
+                    {n.returned_usd > 0 && (
+                      <span className="ml-2 text-[10px] text-orange-700">
+                        −{money(n.returned_usd)} dev
+                      </span>
+                    )}
                   </span>
                   <span className="w-14 shrink-0 h-[3px] bg-gray-100 rounded-full overflow-hidden">
                     <span
@@ -545,6 +556,20 @@ export default function NotasPage() {
                       </>
                     )}
                     {n.discount > 0 && <Fila k="Descuento" v={`$${money(n.discount)}`} />}
+                    {n.returned_usd > 0 && (
+                      <Fila
+                        k="Devuelto"
+                        v={`−$${money(n.returned_usd)}`}
+                        tone="text-orange-300"
+                      />
+                    )}
+                    {n.credit_usd > 0 && (
+                      <Fila
+                        k="Saldo a favor"
+                        v={`$${money(n.credit_usd)}`}
+                        tone="text-sky-300"
+                      />
+                    )}
                     <div className="h-px bg-gray-600 my-1.5" />
                     <Fila k="Abonado" v={`$${money(n.paid_usd)}`} tone="text-emerald-300" />
                     <Fila
@@ -584,6 +609,14 @@ export default function NotasPage() {
                       >
                         editar
                       </Link>
+                      {!anulada && (
+                        <button
+                          onClick={() => setDevolverId(n.id)}
+                          className="text-[11px] text-orange-300 hover:text-orange-200"
+                        >
+                          devolver
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDelete(n.id)}
                         className="text-[11px] text-gray-500 hover:text-red-300 ml-auto"
@@ -647,8 +680,402 @@ export default function NotasPage() {
         />
       )}
 
+      {devolverId && (
+        <DevolverModal
+          noteId={devolverId}
+          onClose={() => setDevolverId(null)}
+          onSaved={() => {
+            setDevolverId(null);
+            load();
+          }}
+        />
+      )}
+
       {showBuscar && <BusquedaModal onClose={() => setShowBuscar(false)} />}
     </main>
+  );
+}
+
+/* ================= ventana de devolucion ================= */
+
+type LineaVendida = {
+  note_item_id: string;
+  product_id: string | null;
+  code: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  supply_type: string;
+  supplier_name: string | null;
+  ya_devuelto: number;
+};
+
+type DevRegistrada = {
+  id: string;
+  numero: number;
+  return_date: string;
+  total: number;
+  items: {
+    code: string;
+    description: string;
+    quantity: number;
+    line_total: number;
+    reason: string | null;
+    destination: string;
+    observation: string | null;
+  }[];
+};
+
+type DatosDev = {
+  total_devuelto: number;
+  lineas_vendidas: LineaVendida[];
+  devoluciones: DevRegistrada[];
+};
+
+const MOTIVOS = [
+  "No era compatible",
+  "Vino defectuoso",
+  "Se daño en el camino",
+  "Pidio otro repuesto",
+  "Se arrepintio",
+  "Le sobro",
+  "Otro",
+];
+
+const DESTINOS: { k: string; l: string; ayuda: string }[] = [
+  { k: "ALMACEN", l: "Vuelve a mi almacen", ayuda: "esta bueno, se vuelve a vender" },
+  { k: "PROVEEDOR", l: "Se lo devuelvo al proveedor", ayuda: "no toca tu stock" },
+  { k: "PERDIDA", l: "Se perdio", ayuda: "vino roto y no lo reclamas" },
+];
+
+function DevolverModal({
+  noteId,
+  onClose,
+  onSaved,
+}: {
+  noteId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [d, setD] = useState<DatosDev | null>(null);
+  const [col, setCol] = useState<Collection | null>(null);
+  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
+  const [sel, setSel] = useState<
+    Record<string, { qty: string; reason: string; destination: string; obs: string }>
+  >({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const cargar = useCallback(async () => {
+    const [r1, r2] = await Promise.all([
+      supabase.rpc("note_returns", { p_note_id: noteId }),
+      supabase.rpc("note_collection", { p_note_id: noteId }),
+    ]);
+    if (r1.error) {
+      setErr(r1.error.message);
+      return;
+    }
+    setD(r1.data as DatosDev);
+    if (!r2.error) setCol(r2.data as Collection);
+  }, [noteId]);
+
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
+
+  function marcar(l: LineaVendida) {
+    setSel((p) => {
+      const n = { ...p };
+      if (n[l.note_item_id]) {
+        delete n[l.note_item_id];
+      } else {
+        n[l.note_item_id] = {
+          qty: "1",
+          reason: MOTIVOS[0],
+          destination: l.supply_type === "PEDIDO" ? "PROVEEDOR" : "ALMACEN",
+          obs: "",
+        };
+      }
+      return n;
+    });
+  }
+
+  function editar(id: string, campo: string, valor: string) {
+    setSel((p) => ({ ...p, [id]: { ...p[id], [campo]: valor } }));
+  }
+
+  const resumen = useMemo(() => {
+    if (!d) return { monto: 0, aAlmacen: 0, aProveedor: 0, perdida: 0 };
+    let monto = 0;
+    let aAlmacen = 0;
+    let aProveedor = 0;
+    let perdida = 0;
+    for (const l of d.lineas_vendidas) {
+      const s = sel[l.note_item_id];
+      if (!s) continue;
+      const q = Number(s.qty.replace(",", ".")) || 0;
+      monto += q * l.unit_price;
+      if (s.destination === "ALMACEN") aAlmacen += q;
+      else if (s.destination === "PROVEEDOR") aProveedor += q;
+      else perdida += q;
+    }
+    return { monto, aAlmacen, aProveedor, perdida };
+  }, [sel, d]);
+
+  async function guardar() {
+    setErr(null);
+    const items = Object.entries(sel)
+      .map(([id, s]) => ({
+        note_item_id: id,
+        quantity: Number(s.qty.replace(",", ".")) || 0,
+        reason: s.reason,
+        destination: s.destination,
+        observation: s.obs,
+      }))
+      .filter((i) => i.quantity > 0);
+
+    if (items.length === 0) {
+      setErr("Marca al menos una linea y ponle cantidad.");
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.rpc("create_return", {
+      p_note_id: noteId,
+      p_return_date: fecha,
+      p_items: items,
+      p_notes: null,
+    });
+    setBusy(false);
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+    onSaved();
+  }
+
+  async function borrar(id: string) {
+    if (!confirm("¿Eliminar esta devolucion? La mercancia vuelve a contarse como vendida."))
+      return;
+    const { error } = await supabase.rpc("delete_return", { p_return_id: id });
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+    cargar();
+  }
+
+  const nuevaDeuda = col
+    ? Math.max(col.neto - resumen.monto - col.paid, 0)
+    : 0;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-baseline justify-between mb-1">
+          <h2 className="text-base font-semibold text-gray-900">
+            Devolver {col ? `de la nota ${col.sequence_number}` : ""}
+          </h2>
+          <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-900">
+            cerrar
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">
+          {col?.display_name} · marca lo que el cliente trajo de vuelta
+        </p>
+
+        <div className="flex items-center gap-2 mb-3">
+          <label className="text-[11px] text-gray-500">Fecha</label>
+          <input
+            type="date"
+            value={fecha}
+            onChange={(e) => setFecha(e.target.value)}
+            className="h-8 px-2 border border-gray-300 rounded-lg text-sm"
+          />
+        </div>
+
+        {d?.lineas_vendidas.map((l) => {
+          const s = sel[l.note_item_id];
+          const disponible = l.quantity - l.ya_devuelto;
+          return (
+            <div
+              key={l.note_item_id}
+              className={`border rounded-xl p-3 mb-2 ${
+                s ? "border-indigo-300" : "border-gray-200"
+              } ${disponible <= 0 ? "opacity-50" : ""}`}
+            >
+              <div className="flex gap-2 items-center">
+                <input
+                  type="checkbox"
+                  checked={!!s}
+                  disabled={disponible <= 0}
+                  onChange={() => marcar(l)}
+                  className="w-3.5 h-3.5 shrink-0"
+                />
+                <span className="flex-1 min-w-0 truncate text-[13px]">
+                  {l.description}
+                </span>
+                <span
+                  className={`text-[10.5px] px-1.5 py-[1px] rounded-full shrink-0 ${
+                    l.supply_type === "PEDIDO"
+                      ? "bg-violet-50 text-violet-800"
+                      : "bg-emerald-50 text-emerald-800"
+                  }`}
+                >
+                  {l.supply_type === "PEDIDO" ? "bajo pedido" : "de almacen"}
+                </span>
+                <span className="text-[11.5px] text-gray-500 shrink-0">
+                  vendio {l.quantity}
+                  {l.ya_devuelto > 0 && ` · devolvio ${l.ya_devuelto}`}
+                </span>
+                {s && (
+                  <input
+                    value={s.qty}
+                    onChange={(e) => editar(l.note_item_id, "qty", e.target.value)}
+                    className="w-14 h-7 px-2 border border-indigo-300 rounded-lg text-sm text-right shrink-0"
+                  />
+                )}
+                <span className="w-16 text-right text-[13px] shrink-0">
+                  {s
+                    ? money((Number(s.qty.replace(",", ".")) || 0) * l.unit_price)
+                    : money(l.unit_price)}
+                </span>
+              </div>
+
+              {s && (
+                <div className="mt-2.5">
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>
+                      <label className="block text-[10.5px] text-gray-500 mb-1">
+                        Motivo
+                      </label>
+                      <select
+                        value={s.reason}
+                        onChange={(e) => editar(l.note_item_id, "reason", e.target.value)}
+                        className="w-full h-8 px-2 border border-gray-300 rounded-lg text-[12.5px]"
+                      >
+                        {MOTIVOS.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10.5px] text-gray-500 mb-1">
+                        ¿A donde va?
+                      </label>
+                      <select
+                        value={s.destination}
+                        onChange={(e) =>
+                          editar(l.note_item_id, "destination", e.target.value)
+                        }
+                        className="w-full h-8 px-2 border border-gray-300 rounded-lg text-[12.5px]"
+                      >
+                        {DESTINOS.map((x) => (
+                          <option key={x.k} value={x.k}>
+                            {x.l}
+                            {x.k === "PROVEEDOR" && l.supplier_name
+                              ? ` (${l.supplier_name})`
+                              : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <input
+                    value={s.obs}
+                    onChange={(e) => editar(l.note_item_id, "obs", e.target.value)}
+                    placeholder="Observacion: que paso exactamente"
+                    className="w-full h-8 px-2.5 border border-gray-200 rounded-lg text-[12.5px]"
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {resumen.monto > 0 && col && (
+          <div className="p-3 rounded-lg bg-emerald-50 text-[12.5px] text-emerald-800 leading-relaxed mb-3">
+            {resumen.aAlmacen > 0 && (
+              <div>· {resumen.aAlmacen} unidades vuelven a tu almacen</div>
+            )}
+            {resumen.aProveedor > 0 && (
+              <div>· {resumen.aProveedor} no tocan tu stock, van de vuelta al proveedor</div>
+            )}
+            {resumen.perdida > 0 && (
+              <div>· {resumen.perdida} se pierden</div>
+            )}
+            <div>
+              · el cliente deja de deber{" "}
+              <b className="font-medium">${money(resumen.monto)}</b>
+              {nuevaDeuda > 0
+                ? `, le queda debiendo $${money(nuevaDeuda)}`
+                : ", queda en cero"}
+            </div>
+          </div>
+        )}
+
+        {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
+
+        <div className="flex gap-2 mb-5">
+          <button
+            onClick={guardar}
+            disabled={busy || resumen.monto <= 0}
+            className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-700 disabled:opacity-40"
+          >
+            {busy ? "Guardando..." : "Guardar devolucion"}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+        </div>
+
+        {d && d.devoluciones.length > 0 && (
+          <div className="border-t border-gray-100 pt-3">
+            <p className="text-[11px] text-gray-400 mb-2">
+              Devoluciones ya registradas de esta nota
+            </p>
+            {d.devoluciones.map((r) => (
+              <div
+                key={r.id}
+                className="group border border-orange-200 bg-orange-50/50 rounded-lg p-2.5 mb-2"
+              >
+                <div className="flex items-baseline gap-2 text-[12.5px]">
+                  <span className="text-orange-800">
+                    D-{String(r.numero).padStart(3, "0")} · {r.return_date}
+                  </span>
+                  <span className="ml-auto text-orange-900">−${money(r.total)}</span>
+                  <button
+                    onClick={() => borrar(r.id)}
+                    className="text-[11px] text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                  >
+                    eliminar
+                  </button>
+                </div>
+                {r.items.map((it, i) => (
+                  <div key={i} className="text-[11.5px] text-gray-600 mt-1">
+                    {it.quantity} × {it.description} · {it.reason} ·{" "}
+                    {it.destination === "ALMACEN"
+                      ? "volvio al almacen"
+                      : it.destination === "PROVEEDOR"
+                      ? "al proveedor"
+                      : "perdida"}
+                    {it.observation && ` · ${it.observation}`}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
