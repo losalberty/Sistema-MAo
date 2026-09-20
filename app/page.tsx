@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -8,9 +8,11 @@ type Daily = { date: string; total: number; notes: number };
 type TopClient = { name: string; total: number; notes: number };
 type TopProduct = { code: string; description: string; quantity: number; total: number };
 
-type Week = {
+type Resumen = {
   start: string;
   end: string;
+  days?: number;
+  granularity?: string;
   sales: number;
   cost: number;
   notes_count: number;
@@ -34,6 +36,10 @@ const MESES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
+const MESES_CORTOS = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+];
 
 function money(n: number) {
   return "$" + Number(n || 0).toLocaleString("en-US", {
@@ -42,328 +48,508 @@ function money(n: number) {
   });
 }
 
+function miles(n: number) {
+  return "$" + Math.round(Number(n || 0)).toLocaleString("en-US");
+}
+
 function shortMoney(n: number) {
   const v = Number(n || 0);
   if (v >= 1000) return "$" + (v / 1000).toFixed(1) + "k";
   return "$" + v.toFixed(0);
 }
 
-function dayLabel(iso: string) {
-  const d = new Date(iso + "T00:00:00");
-  return DIAS[(d.getDay() + 6) % 7];
+function iso(d: Date) {
+  return d.toISOString().slice(0, 10);
 }
 
 function rangeLabel(start: string, end: string) {
   const a = new Date(start + "T00:00:00");
   const b = new Date(end + "T00:00:00");
-  if (a.getMonth() === b.getMonth()) {
+  if (a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()) {
     return `${a.getDate()} al ${b.getDate()} de ${MESES[a.getMonth()]}`;
   }
-  return `${a.getDate()} de ${MESES[a.getMonth()]} al ${b.getDate()} de ${MESES[b.getMonth()]}`;
+  return `${a.getDate()} ${MESES_CORTOS[a.getMonth()]} al ${b.getDate()} ${MESES_CORTOS[b.getMonth()]}`;
 }
 
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 12) return "Buenos dias";
-  if (h < 19) return "Buenas tardes";
-  return "Buenas noches";
-}
+const ACCESOS = [
+  {
+    href: "/notas/nueva",
+    titulo: "Nueva nota",
+    sub: "vender y entregar",
+    icono: "＋",
+    chip: "bg-blue-50 text-blue-800",
+    borde: "border-gray-300",
+  },
+  {
+    href: "/notas",
+    titulo: "Ver notas",
+    sub: "historial y busqueda",
+    icono: "☷",
+    chip: "bg-gray-100 text-gray-700",
+    borde: "border-gray-200",
+  },
+  {
+    href: "/cobranzas",
+    titulo: "Cobranzas",
+    sub: "quien debe y abonos",
+    icono: "◍",
+    chip: "bg-emerald-50 text-emerald-800",
+    borde: "border-gray-200",
+  },
+  {
+    href: "/compras",
+    titulo: "Compras",
+    sub: "facturas de proveedor",
+    icono: "▩",
+    chip: "bg-orange-50 text-orange-800",
+    borde: "border-gray-200",
+  },
+  {
+    href: "/productos",
+    titulo: "Productos",
+    sub: "precios y costos",
+    icono: "▦",
+    chip: "bg-violet-50 text-violet-800",
+    borde: "border-gray-200",
+  },
+  {
+    href: "/informes",
+    titulo: "Informes",
+    sub: "arma el tuyo por fechas",
+    icono: "▧",
+    chip: "bg-gray-100 text-gray-700",
+    borde: "border-gray-200",
+  },
+];
 
 export default function Home() {
-  const [week, setWeek] = useState<Week | null>(null);
-  const [offset, setOffset] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<Resumen | null>(null);
+  const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [modo, setModo] = useState<"semana" | "rango">("semana");
+  const [offset, setOffset] = useState(0);
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [abreCal, setAbreCal] = useState(false);
+
+  // carrusel
+  const [panel, setPanel] = useState(0);
+  const [quieto, setQuieto] = useState(false);
+  const quietoRef = useRef(false);
+  quietoRef.current = quieto;
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    setError(null);
+    const res =
+      modo === "semana"
+        ? await supabase.rpc("dashboard_week", { p_offset: offset })
+        : await supabase.rpc("dashboard_range", { p_from: desde, p_to: hasta });
+    setCargando(false);
+    if (res.error) {
+      setError(res.error.message);
+      return;
+    }
+    setData(res.data as Resumen);
+  }, [modo, offset, desde, hasta]);
+
   useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    supabase.rpc("dashboard_week", { p_offset: offset }).then(({ data, error }) => {
-      if (!alive) return;
-      setLoading(false);
-      if (error) return setError(error.message);
-      setWeek(data as Week);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [offset]);
+    if (modo === "rango" && (!desde || !hasta)) return;
+    cargar();
+  }, [cargar, modo, desde, hasta]);
 
-  const profit = week ? week.sales - week.cost : 0;
-  const margin = week && week.cost > 0 ? (profit / week.cost) * 100 : null;
-  const delta =
-    week && week.prev_sales > 0 ? ((week.sales - week.prev_sales) / week.prev_sales) * 100 : null;
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (!quietoRef.current) setPanel((p) => (p === 0 ? 1 : 0));
+    }, 9000);
+    return () => clearInterval(t);
+  }, []);
 
-  const maxDaily = useMemo(() => {
-    if (!week?.daily?.length) return 0;
-    return Math.max(...week.daily.map((d) => Number(d.total)));
-  }, [week]);
+  const maxDia = useMemo(() => {
+    if (!data || data.daily.length === 0) return 0;
+    return Math.max(...data.daily.map((d) => d.total));
+  }, [data]);
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  function preset(dias: number) {
+    const hoy = new Date();
+    const ini = new Date();
+    ini.setDate(hoy.getDate() - (dias - 1));
+    setDesde(iso(ini));
+    setHasta(iso(hoy));
+    setModo("rango");
+    setAbreCal(false);
+  }
+
+  function presetMes(atras: number) {
+    const hoy = new Date();
+    const ini = new Date(hoy.getFullYear(), hoy.getMonth() - atras, 1);
+    const fin = new Date(hoy.getFullYear(), hoy.getMonth() - atras + 1, 0);
+    setDesde(iso(ini));
+    setHasta(iso(fin));
+    setModo("rango");
+    setAbreCal(false);
+  }
+
+  const ganancia = data ? data.sales - data.cost : 0;
+  const margen = data && data.cost > 0 ? (ganancia / data.cost) * 100 : null;
+  const variacion =
+    data && data.prev_sales > 0
+      ? ((data.sales - data.prev_sales) / data.prev_sales) * 100
+      : null;
+
+  const etiqueta = data
+    ? modo === "semana" && offset === 0
+      ? "Esta semana"
+      : modo === "semana"
+      ? "Semana"
+      : "Periodo"
+    : "";
 
   return (
-    <main className="p-10 max-w-6xl">
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <h1 className="text-xl font-medium mb-1">{greeting()}, Mao</h1>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setOffset((o) => o - 1)}
-                className="text-gray-400 hover:text-gray-900 text-sm w-5"
-                aria-label="Semana anterior"
-              >
-                ‹
-              </button>
-              <p className="text-sm text-gray-500 min-w-[190px] text-center">
-                {week ? rangeLabel(week.start, week.end) : "Cargando..."}
-                {offset === 0 && <span className="text-gray-400"> · esta semana</span>}
-              </p>
-              <button
-                onClick={() => setOffset((o) => Math.min(0, o + 1))}
-                disabled={offset === 0}
-                className="text-gray-400 hover:text-gray-900 text-sm w-5 disabled:opacity-25"
-                aria-label="Semana siguiente"
-              >
-                ›
-              </button>
+    <main className="p-8 max-w-5xl">
+      {error && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* ===================== carrusel ===================== */}
+      <div
+        onMouseEnter={() => setQuieto(true)}
+        onMouseLeave={() => setQuieto(false)}
+        className="bg-white border border-gray-200 rounded-xl p-5 mb-6"
+      >
+        <div className="relative min-h-[296px]">
+          {/* ---------- panel 1: resumen ---------- */}
+          <div
+            className={`transition-opacity duration-500 ${
+              panel === 0 ? "opacity-100" : "opacity-0 pointer-events-none absolute inset-0"
+            }`}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h1 className="text-lg font-semibold text-gray-900">{etiqueta}</h1>
+                <p className="text-xs text-gray-500">
+                  {data ? rangeLabel(data.start, data.end) : "cargando..."}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1.5 relative">
+                <button
+                  onClick={() => {
+                    setModo("semana");
+                    setOffset((o) => o - 1);
+                  }}
+                  className="w-7 h-7 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  aria-label="Anterior"
+                >
+                  ‹
+                </button>
+                <button
+                  onClick={() => setAbreCal((v) => !v)}
+                  className="h-7 px-2.5 rounded-lg border border-gray-200 text-[12px] text-gray-700 hover:bg-gray-50"
+                >
+                  {data ? rangeLabel(data.start, data.end) : "fechas"}
+                </button>
+                <button
+                  onClick={() => {
+                    setModo("semana");
+                    setOffset((o) => Math.min(o + 1, 0));
+                  }}
+                  disabled={modo === "semana" && offset === 0}
+                  className="w-7 h-7 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30"
+                  aria-label="Siguiente"
+                >
+                  ›
+                </button>
+
+                {abreCal && (
+                  <div className="absolute right-0 top-9 z-30 bg-white border border-gray-200 rounded-xl shadow-xl p-3 w-72">
+                    <div className="flex gap-2 mb-2.5">
+                      <div className="flex-1">
+                        <label className="block text-[10.5px] text-gray-500 mb-1">Desde</label>
+                        <input
+                          type="date"
+                          value={desde}
+                          onChange={(e) => setDesde(e.target.value)}
+                          className="w-full h-8 px-2 border border-gray-200 rounded-lg text-xs"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-[10.5px] text-gray-500 mb-1">Hasta</label>
+                        <input
+                          type="date"
+                          value={hasta}
+                          onChange={(e) => setHasta(e.target.value)}
+                          className="w-full h-8 px-2 border border-gray-200 rounded-lg text-xs"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (desde && hasta) {
+                          setModo("rango");
+                          setAbreCal(false);
+                        }
+                      }}
+                      className="w-full h-8 rounded-lg bg-gray-900 text-white text-xs mb-3 hover:bg-gray-700"
+                    >
+                      Ver este periodo
+                    </button>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Preset onClick={() => { setModo("semana"); setOffset(0); setAbreCal(false); }}>
+                        esta semana
+                      </Preset>
+                      <Preset onClick={() => preset(30)}>ultimos 30 dias</Preset>
+                      <Preset onClick={() => presetMes(0)}>este mes</Preset>
+                      <Preset onClick={() => presetMes(1)}>mes pasado</Preset>
+                      <Preset onClick={() => preset(365)}>ultimo año</Preset>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {cargando && !data && (
+              <p className="text-sm text-gray-400">Cargando resumen...</p>
+            )}
+
+            {data && (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
+                  <Stat
+                    label="Ventas"
+                    valor={miles(data.sales)}
+                    nota={
+                      variacion !== null
+                        ? `${variacion >= 0 ? "+" : ""}${variacion.toFixed(0)}% vs antes`
+                        : "sin comparacion"
+                    }
+                    tono={variacion !== null && variacion < 0 ? "text-red-600" : "text-emerald-700"}
+                  />
+                  <Stat
+                    label="Ganancia"
+                    valor={miles(ganancia)}
+                    nota={margen !== null ? `margen ${margen.toFixed(1)}%` : "sin costo cargado"}
+                    valorTono="text-emerald-700"
+                  />
+                  <Stat
+                    label="Notas"
+                    valor={String(data.notes_count)}
+                    nota={`${data.clients_count} clientes`}
+                  />
+                  <Stat
+                    label="Por cobrar"
+                    valor={miles(data.pending_total)}
+                    valorTono="text-amber-700"
+                    nota={
+                      data.overdue_total > 0
+                        ? `${miles(data.overdue_total)} vencido`
+                        : "nada vencido"
+                    }
+                    tono={data.overdue_total > 0 ? "text-red-600" : "text-gray-400"}
+                  />
+                </div>
+
+                <div className="flex items-end gap-1.5 h-[86px]">
+                  {data.daily.map((d) => {
+                    const alto = maxDia > 0 ? (d.total / maxDia) * 66 : 0;
+                    const dd = new Date(d.date + "T00:00:00");
+                    const etq =
+                      data.granularity === "month"
+                        ? MESES_CORTOS[dd.getMonth()]
+                        : DIAS[(dd.getDay() + 6) % 7];
+                    return (
+                      <div key={d.date} className="flex-1 text-center group relative">
+                        <div
+                          className="bg-blue-200 group-hover:bg-blue-500 rounded-t transition-colors"
+                          style={{ height: `${Math.max(alto, 2)}px` }}
+                        />
+                        <div className="text-[10px] text-gray-400 mt-1">{etq}</div>
+                        {d.total > 0 && (
+                          <div className="hidden group-hover:block absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10">
+                            {shortMoney(d.total)} · {d.notes} notas
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ---------- panel 2: accesos ---------- */}
+          <div
+            className={`transition-opacity duration-500 ${
+              panel === 1 ? "opacity-100" : "opacity-0 pointer-events-none absolute inset-0"
+            }`}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h1 className="text-lg font-semibold text-gray-900">¿Que vas a hacer?</h1>
+                <p className="text-xs text-gray-500">accesos rapidos</p>
+              </div>
+              {data && data.overdue_count > 0 && (
+                <span className="text-[11.5px] text-red-600">
+                  {data.overdue_count} notas vencidas
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+              {ACCESOS.map((a) => (
+                <Link
+                  key={a.href}
+                  href={a.href}
+                  className={`border ${a.borde} rounded-xl p-3 hover:border-gray-400 hover:shadow-sm transition-all`}
+                >
+                  <span
+                    className={`w-8 h-8 rounded-[9px] ${a.chip} flex items-center justify-center text-base mb-1.5`}
+                  >
+                    {a.icono}
+                  </span>
+                  <div className="text-[13.5px] text-gray-900">{a.titulo}</div>
+                  <div className="text-[11px] text-gray-500">{a.sub}</div>
+                </Link>
+              ))}
             </div>
           </div>
-          <Link
-            href="/notas/nueva"
-            className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg transition-all hover:bg-indigo-700 hover:shadow-md active:scale-[0.98]"
-          >
-            + Nueva nota
-          </Link>
         </div>
 
-        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+        <div className="flex items-center justify-center gap-2 mt-4">
+          {[0, 1].map((i) => (
+            <button
+              key={i}
+              onClick={() => setPanel(i)}
+              aria-label={`Ver panel ${i + 1}`}
+              className={`w-[7px] h-[7px] rounded-full ${
+                panel === i ? "bg-gray-700" : "bg-gray-300"
+              }`}
+            />
+          ))}
+          <span className="ml-2 text-[10.5px] text-gray-400">
+            {quieto ? "detenido" : "se detiene al pasar el cursor"}
+          </span>
+        </div>
+      </div>
 
-        {loading && !week && <p className="text-sm text-gray-400">Cargando resumen...</p>}
-
-        {week && (
-          <>
-            {/* Indicadores */}
-            <div className="grid grid-cols-4 gap-4 mb-4">
-              <div className="bg-white border border-gray-200 rounded-xl p-5 border-t-2 border-t-indigo-500 hover:shadow-md hover:border-gray-300 transition-all">
-                <p className="text-xs text-gray-400 mb-2">Ventas</p>
-                <p className="text-2xl font-medium tracking-tight text-indigo-700">
-                  {money(week.sales)}
-                </p>
-                <p className="text-xs mt-2">
-                  {delta == null ? (
-                    <span className="text-gray-400">sin semana previa</span>
-                  ) : (
-                    <span className={delta >= 0 ? "text-green-600" : "text-red-500"}>
-                      {delta >= 0 ? "▲" : "▼"} {Math.abs(delta).toFixed(0)}%
-                      <span className="text-gray-400"> vs semana pasada</span>
-                    </span>
-                  )}
-                </p>
-              </div>
-
-              <div className="bg-white border border-gray-200 rounded-xl p-5 border-t-2 border-t-emerald-500 hover:shadow-md hover:border-gray-300 transition-all">
-                <p className="text-xs text-gray-400 mb-2">Ganancia</p>
-                <p
-                  className={`text-2xl font-medium tracking-tight ${
-                    profit < 0 ? "text-red-600" : "text-emerald-700"
-                  }`}
-                >
-                  {money(profit)}
-                </p>
-                <p className="text-xs mt-2 text-gray-400">
-                  {margin == null ? "sin costos cargados" : `margen ${margin.toFixed(0)}%`}
-                </p>
-              </div>
-
-              <div className="bg-white border border-gray-200 rounded-xl p-5 border-t-2 border-t-sky-500 hover:shadow-md hover:border-gray-300 transition-all">
-                <p className="text-xs text-gray-400 mb-2">Notas</p>
-                <p className="text-2xl font-medium tracking-tight text-sky-700">
-                  {week.notes_count}
-                </p>
-                <p className="text-xs mt-2 text-gray-400">
-                  {week.clients_count} cliente{week.clients_count === 1 ? "" : "s"}
-                  {week.notes_count > 0 && ` · ${money(week.sales / week.notes_count)} promedio`}
-                </p>
-              </div>
-
-              <Link
-                href="/notas"
-                className="bg-white border border-gray-200 rounded-xl p-5 border-t-2 border-t-amber-500 transition-all hover:shadow-md hover:border-gray-300"
-              >
-                <p className="text-xs text-gray-400 mb-2">Por cobrar</p>
-                <p
-                  className={`text-2xl font-medium tracking-tight ${
-                    week.pending_total > 0 ? "text-amber-600" : "text-gray-400"
-                  }`}
-                >
-                  {money(week.pending_total)}
-                </p>
-                <p className="text-xs mt-2">
-                  {week.overdue_count > 0 ? (
-                    <span className="text-red-500">
-                      {week.overdue_count} vencida{week.overdue_count === 1 ? "" : "s"} ·{" "}
-                      {money(week.overdue_total)}
-                    </span>
-                  ) : (
-                    <span className="text-gray-400">
-                      {week.pending_count} nota{week.pending_count === 1 ? "" : "s"} pendiente
-                      {week.pending_count === 1 ? "" : "s"}
-                    </span>
-                  )}
-                </p>
-              </Link>
-            </div>
-
-            {/* Grafico por dia */}
-            <div className="bg-white border border-gray-200 rounded-xl p-6 mb-4">
-              <div className="flex items-baseline justify-between mb-6">
-                <p className="text-sm font-medium">Ventas por dia</p>
-                <p className="text-xs text-gray-400">
-                  {maxDaily > 0 ? `mejor dia ${money(maxDaily)}` : "sin movimiento esta semana"}
-                </p>
-              </div>
-              <div className="flex items-end gap-3 h-40">
-                {week.daily.map((d) => {
-                  const v = Number(d.total);
-                  const pct = maxDaily > 0 ? (v / maxDaily) * 100 : 0;
-                  const isToday = d.date === todayIso;
-                  return (
-                    <div key={d.date} className="flex-1 flex flex-col items-center justify-end h-full">
-                      {v > 0 && (
-                        <span className="text-[11px] text-gray-500 mb-1.5">{shortMoney(v)}</span>
-                      )}
-                      <div
-                        title={`${money(v)} · ${d.notes} nota(s)`}
-                        style={{ height: `${Math.max(pct, v > 0 ? 4 : 1)}%` }}
-                        className={`w-full rounded-lg transition-all cursor-default ${
-                          v === 0
-                            ? "bg-gray-100"
-                            : isToday
-                            ? "bg-indigo-600 hover:bg-indigo-700"
-                            : "bg-indigo-300 hover:bg-indigo-500"
-                        }`}
-                      />
-                      <span
-                        className={`text-[11px] mt-2 ${
-                          isToday ? "text-indigo-700 font-medium" : "text-gray-400"
-                        }`}
-                      >
-                        {dayLabel(d.date)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Listas */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="bg-white border border-gray-200 rounded-xl p-6">
-                <p className="text-sm font-medium mb-4">Mejores clientes</p>
-                {week.top_clients.length === 0 ? (
-                  <p className="text-sm text-gray-400">Sin ventas esta semana.</p>
-                ) : (
-                  <div className="flex flex-col">
-                    {week.top_clients.map((c, i) => {
-                      const pct = week.sales > 0 ? (Number(c.total) / week.sales) * 100 : 0;
-                      return (
-                        <div
-                          key={c.name + i}
-                          className="py-2 border-b border-gray-100 last:border-0 group"
-                        >
-                          <div className="flex items-baseline justify-between mb-1.5">
-                            <span className="text-sm truncate pr-3 group-hover:text-teal-800 transition-colors">
-                              {c.name}
-                            </span>
-                            <span className="text-sm text-gray-600 whitespace-nowrap">
-                              {money(c.total)}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-teal-500 group-hover:bg-teal-600 rounded-full transition-all"
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                            <span className="text-[11px] text-gray-400 w-16 text-right">
-                              {c.notes} nota{c.notes === 1 ? "" : "s"}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-white border border-gray-200 rounded-xl p-6">
-                <p className="text-sm font-medium mb-4">Lo que mas se movio</p>
-                {week.top_products.length === 0 ? (
-                  <p className="text-sm text-gray-400">Sin ventas esta semana.</p>
-                ) : (
-                  <div className="flex flex-col">
-                    {week.top_products.map((p, i) => (
-                      <div
-                        key={p.code + i}
-                        className="flex items-baseline justify-between py-2 border-b border-gray-100 last:border-0 group hover:bg-violet-50/60 -mx-2 px-2 rounded transition-colors"
-                      >
-                        <div className="min-w-0 pr-3">
-                          <p className="text-sm truncate group-hover:text-violet-900 transition-colors">
-                            {p.description}
-                          </p>
-                          <p className="text-[11px] text-gray-400">
-                            {p.code} · {Number(p.quantity)} unidad
-                            {Number(p.quantity) === 1 ? "" : "es"}
-                          </p>
-                        </div>
-                        <span className="text-sm text-gray-600 whitespace-nowrap">
-                          {money(p.total)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Avisos */}
-            {(week.products_no_cost > 0 || week.low_margin_notes > 0) && (
-              <div className="bg-white border border-gray-200 rounded-xl p-5">
-                <p className="text-xs text-gray-400 mb-3">Cosas que revisar</p>
-                <div className="flex flex-col gap-2">
-                  {week.products_no_cost > 0 && (
-                    <Link
-                      href="/productos"
-                      className="flex items-baseline justify-between group py-1"
-                    >
-                      <span className="text-sm text-gray-700 group-hover:text-gray-900">
-                        <span className="text-amber-600 mr-2">●</span>
-                        {week.products_no_cost} de {week.products_total} productos sin costo
-                        cargado
-                      </span>
-                      <span className="text-xs text-gray-400 group-hover:text-gray-700">
-                        cargar costos →
-                      </span>
-                    </Link>
-                  )}
-                  {week.low_margin_notes > 0 && (
-                    <Link href="/notas" className="flex items-baseline justify-between group py-1">
-                      <span className="text-sm text-gray-700 group-hover:text-gray-900">
-                        <span className="text-red-500 mr-2">●</span>
-                        {week.low_margin_notes} nota{week.low_margin_notes === 1 ? "" : "s"} de esta
-                        semana con margen bajo 15%
-                      </span>
-                      <span className="text-xs text-gray-400 group-hover:text-gray-700">
-                        ver notas →
-                      </span>
-                    </Link>
-                  )}
-                </div>
-              </div>
+      {/* ===================== detalle ===================== */}
+      {data && (
+        <div className="grid md:grid-cols-2 gap-5">
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <p className="text-xs text-gray-500 mb-3">Mejores clientes</p>
+            {data.top_clients.length === 0 && (
+              <p className="text-sm text-gray-400">Sin ventas en este periodo.</p>
             )}
-          </>
-        )}
+            {data.top_clients.map((c) => {
+              const pct = data.sales > 0 ? (c.total / data.sales) * 100 : 0;
+              return (
+                <div key={c.name} className="mb-2.5">
+                  <div className="flex justify-between text-[13px] mb-1">
+                    <span className="truncate pr-2 text-gray-800">{c.name}</span>
+                    <span className="text-gray-900 shrink-0">{money(c.total)}</span>
+                  </div>
+                  <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-teal-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <p className="text-xs text-gray-500 mb-3">Lo que mas se movio</p>
+            {data.top_products.length === 0 && (
+              <p className="text-sm text-gray-400">Sin ventas en este periodo.</p>
+            )}
+            {data.top_products.map((p) => (
+              <div
+                key={p.code}
+                className="flex justify-between items-baseline text-[13px] py-1.5 border-b border-gray-50 last:border-0"
+              >
+                <span className="truncate pr-2">
+                  <span className="text-gray-400 font-mono text-[10.5px] mr-1.5">
+                    {p.code}
+                  </span>
+                  <span className="text-gray-700">{p.description}</span>
+                </span>
+                <span className="shrink-0 text-gray-900">
+                  {p.quantity} · {money(p.total)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data && (data.products_no_cost > 0 || data.low_margin_notes > 0) && (
+        <div className="mt-5 bg-white border border-gray-200 rounded-xl p-5">
+          <p className="text-xs text-gray-500 mb-2.5">Cosas que revisar</p>
+          {data.products_no_cost > 0 && (
+            <Link
+              href="/productos"
+              className="flex items-center gap-2 text-[13px] text-gray-700 hover:text-gray-950 py-1"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              {data.products_no_cost} de {data.products_total} productos sin costo cargado —
+              su ganancia sale mal
+            </Link>
+          )}
+          {data.low_margin_notes > 0 && (
+            <Link
+              href="/notas"
+              className="flex items-center gap-2 text-[13px] text-gray-700 hover:text-gray-950 py-1"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+              {data.low_margin_notes} notas con margen bajo 15% en este periodo
+            </Link>
+          )}
+        </div>
+      )}
     </main>
+  );
+}
+
+function Stat({
+  label,
+  valor,
+  nota,
+  tono,
+  valorTono,
+}: {
+  label: string;
+  valor: string;
+  nota?: string;
+  tono?: string;
+  valorTono?: string;
+}) {
+  return (
+    <div className="bg-gray-50 rounded-xl px-3.5 py-3">
+      <p className="text-[11.5px] text-gray-500">{label}</p>
+      <p className={`text-[21px] font-semibold ${valorTono ?? "text-gray-900"}`}>{valor}</p>
+      {nota && <p className={`text-[10.5px] ${tono ?? "text-gray-400"}`}>{nota}</p>}
+    </div>
+  );
+}
+
+function Preset({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50"
+    >
+      {children}
+    </button>
   );
 }
