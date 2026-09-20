@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import ClientePicker, { type ClienteHit } from "@/components/ClientePicker";
 
 type NoteRow = {
   id: string;
@@ -876,8 +877,7 @@ function AbonarModal({
 /* ================= ventana de busqueda profunda ================= */
 
 function BusquedaModal({ onClose }: { onClose: () => void }) {
-  const [clientes, setClientes] = useState<{ id: string; name: string }[]>([]);
-  const [clienteId, setClienteId] = useState("");
+  const [cliente, setCliente] = useState<ClienteHit | null>(null);
   const [texto, setTexto] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
@@ -885,11 +885,7 @@ function BusquedaModal({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
-    supabase.rpc("clients_for_picker").then(({ data }) => {
-      setClientes((data ?? []) as { id: string; name: string }[]);
-    });
-  }, []);
+  const clienteId = cliente?.id ?? "";
 
   async function buscar() {
     setErr(null);
@@ -917,7 +913,7 @@ function BusquedaModal({ onClose }: { onClose: () => void }) {
     return Math.max(...res.por_mes.map((m) => m.unidades));
   }, [res]);
 
-  const clienteNombre = clientes.find((c) => c.id === clienteId)?.name ?? "";
+  const clienteNombre = cliente?.name ?? "";
 
   return (
     <div
@@ -941,16 +937,12 @@ function BusquedaModal({ onClose }: { onClose: () => void }) {
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
             <label className="block text-[11px] text-gray-500 mb-1">Cliente</label>
-            <select
-              value={clienteId}
-              onChange={(e) => setClienteId(e.target.value)}
-              className="w-full h-9 px-2 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="">Todos los clientes</option>
-              {clientes.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <ClientePicker
+              value={cliente}
+              onChange={setCliente}
+              placeholder="Escribe el nombre, ej: repues"
+              autoFocus
+            />
           </div>
           <div>
             <label className="block text-[11px] text-gray-500 mb-1">
