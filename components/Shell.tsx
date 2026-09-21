@@ -12,6 +12,7 @@ const navItems: { label: string; icon: string; href: string | null }[] = [
   { label: "Productos", icon: "▦", href: "/productos" },
   { label: "Inventario", icon: "▨", href: "/inventario" },
   { label: "Compras", icon: "▩", href: "/compras" },
+  { label: "Pedidos", icon: "⇄", href: "/pedidos" },
   { label: "Cobranzas", icon: "◍", href: "/cobranzas" },
   { label: "Devoluciones", icon: "↩", href: "/devoluciones" },
   { label: "Devoluciones", icon: "↺", href: "/devoluciones" },
