@@ -2,6 +2,97 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   Base visual del sistema
+   ============================================================ */
+
+@layer base {
+  :root {
+    /* Inter viene de @fontsource-variable/inter, importado en layout.tsx */
+    --font-inter: "Inter Variable";
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-[#f5f6f8] text-gray-900 antialiased;
+    /* numeros del mismo ancho: las columnas de cantidades y montos
+       quedan alineadas sin importar que digito sea */
+    font-feature-settings: "tnum" 1, "cv11" 1;
+  }
+
+  /* foco visible y consistente al navegar con teclado */
+  :focus-visible {
+    outline: 2px solid theme("colors.brand.400");
+    outline-offset: 1px;
+  }
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+    border-color: theme("colors.brand.400") !important;
+    box-shadow: 0 0 0 3px theme("colors.brand.100");
+  }
+
+  ::selection {
+    background: theme("colors.brand.100");
+  }
+
+  /* quitar las flechitas de los campos numericos */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  /* barras de desplazamiento discretas */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: theme("colors.gray.300") transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: theme("colors.gray.300");
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: theme("colors.gray.400");
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  /* silueta que parpadea mientras cargan los datos */
+  .skeleton {
+    @apply rounded bg-gray-200/70;
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ============================================================
+   Impresion
+   ============================================================ */
+
 @media print {
   @page {
     size: letter;
