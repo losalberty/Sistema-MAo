@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import Confirmar, { type Pregunta } from "@/components/Confirmar";
+
+type Resumen = {
+  abiertos: number;
+  lineas_retenidas: number;
+  cancelados_vacios: number;
+};
 
 type NotaEspera = {
   note_id: string;
@@ -144,11 +151,13 @@ export default function PedidosPage() {
   const [data, setData] = useState<PorPedir | null>(null);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [provs, setProvs] = useState<Proveedor[]>([]);
+  const [resumen, setResumen] = useState<Resumen | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [pregunta, setPregunta] = useState<Pregunta | null>(null);
 
-  const [tab, setTab] = useState<"pedir" | "pedidos">("pedir");
+  const [tab, setTab] = useState<"pedir" | "pedidos" | "historial">("pedir");
   const [soloEsperando, setSoloEsperando] = useState(false);
 
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -165,10 +174,11 @@ export default function PedidosPage() {
 
   const cargar = useCallback(async () => {
     setCargando(true);
-    const [r1, r2, r3] = await Promise.all([
+    const [r1, r2, r3, r4] = await Promise.all([
       supabase.rpc("pending_orders"),
       supabase.rpc("list_purchase_orders", { p_status: "TODOS" }),
       supabase.rpc("list_suppliers"),
+      supabase.rpc("open_orders_summary"),
     ]);
     setCargando(false);
     if (r1.error) {
@@ -179,7 +189,32 @@ export default function PedidosPage() {
     setData(r1.data as PorPedir);
     if (!r2.error) setPedidos((r2.data ?? []) as Pedido[]);
     if (!r3.error) setProvs((r3.data ?? []) as Proveedor[]);
+    if (!r4.error) setResumen(r4.data as Resumen);
   }, []);
+
+  async function borrarPedido(id: string, numero: number) {
+    const { error } = await supabase.rpc("delete_purchase_order", { p_id: id });
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setDetalleId(null);
+    setAviso(`Pedido P-${String(numero).padStart(4, "0")} borrado.`);
+    cargar();
+  }
+
+  async function limpiarCancelados() {
+    const { data: r, error } = await supabase.rpc("purge_cancelled_orders");
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    const n = (r as { borrados: number }).borrados;
+    setAviso(
+      n > 0 ? `${n} pedidos cancelados borrados.` : "No habia pedidos cancelados vacios."
+    );
+    cargar();
+  }
 
   useEffect(() => {
     cargar();
@@ -279,18 +314,26 @@ export default function PedidosPage() {
     cargar();
   }
 
-  async function cancelarDemanda(noteId: string, productId: string) {
-    if (!confirm("¿El cliente cancelo? Deja de aparecer en Por pedir.")) return;
-    const { error } = await supabase.rpc("cancel_demand", {
-      p_note_id: noteId,
-      p_product_id: productId,
-      p_cancel: true,
+  function cancelarDemanda(noteId: string, productId: string, cliente: string) {
+    setPregunta({
+      titulo: "Cancelar lo que espera este cliente",
+      mensaje: `${cliente} deja de esperar este repuesto y no va a aparecer mas en Por pedir.`,
+      detalle: "La nota no se toca. Si te equivocas, se puede volver a activar.",
+      textoOk: "Si, cancelar",
+      tono: "peligro",
+      onSi: async () => {
+        const { error } = await supabase.rpc("cancel_demand", {
+          p_note_id: noteId,
+          p_product_id: productId,
+          p_cancel: true,
+        });
+        if (error) {
+          setError(error.message);
+          return;
+        }
+        cargar();
+      },
     });
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    cargar();
   }
 
   return (
@@ -345,11 +388,69 @@ export default function PedidosPage() {
         >
           Pedidos ({pedidos.length})
         </button>
+        <button
+          onClick={() => setTab("historial")}
+          className={`px-3 py-1.5 rounded-lg text-sm ${
+            tab === "historial"
+              ? "bg-gray-900 text-white"
+              : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          Historial
+        </button>
       </div>
+
+      {tab === "historial" && <Historial />}
 
       {/* ================= POR PEDIR ================= */}
       {tab === "pedir" && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="px-3.5 py-2 bg-gray-50 border-b border-gray-100 text-[11.5px] text-gray-600 leading-relaxed">
+            Esta lista sale sola de dos sitios: los repuestos{" "}
+            <b className="font-medium">bajo pedido</b> que metiste en notas y aun no
+            consigues, y los de <b className="font-medium">almacen</b> que bajaron de su
+            minimo. Marcas lo que vas a pedirle a un proveedor y generas su pedido.
+          </div>
+
+          {resumen && resumen.lineas_retenidas > 0 && (
+            <div className="px-3.5 py-2 bg-amber-50 border-b border-amber-100 text-[12px] text-amber-900 flex items-center gap-2">
+              <span>
+                {resumen.lineas_retenidas} repuestos tienen la casilla gris porque ya
+                estan dentro de {resumen.abiertos} pedidos abiertos. No se pueden pedir
+                dos veces.
+              </span>
+              <button
+                onClick={() => setTab("pedidos")}
+                className="ml-auto text-[11px] text-amber-800 underline hover:text-amber-950 shrink-0"
+              >
+                ver esos pedidos
+              </button>
+            </div>
+          )}
+
+          {resumen && resumen.cancelados_vacios > 0 && (
+            <div className="px-3.5 py-2 bg-gray-50 border-b border-gray-100 text-[12px] text-gray-600 flex items-center gap-2">
+              <span>
+                Tienes {resumen.cancelados_vacios} pedidos cancelados sin nada recibido.
+              </span>
+              <button
+                onClick={() =>
+                  setPregunta({
+                    titulo: "Borrar los pedidos cancelados",
+                    mensaje: `Se van a borrar ${resumen.cancelados_vacios} pedidos cancelados que nunca recibieron mercancia.`,
+                    detalle:
+                      "Los que si recibieron algo no se tocan, para no dejar stock sin explicacion.",
+                    textoOk: "Si, borrarlos",
+                    tono: "peligro",
+                    onSi: limpiarCancelados,
+                  })
+                }
+                className="ml-auto text-[11px] text-gray-600 underline hover:text-gray-900 shrink-0"
+              >
+                borrarlos
+              </button>
+            </div>
+          )}
           <div className="flex gap-1 px-2.5 py-1.5 border-b border-gray-100">
             <Accion
               icono="＋"
@@ -461,6 +562,13 @@ export default function PedidosPage() {
                         checked={marcada}
                         disabled={!!l.pedido}
                         onChange={() => toggle(l)}
+                        title={
+                          l.pedido
+                            ? `Ya esta en el pedido P-${String(
+                                l.pedido.numero
+                              ).padStart(4, "0")}. Cancela ese pedido si quieres volver a pedirlo.`
+                            : "marcar para pedir"
+                        }
                         className="w-3 h-3 shrink-0"
                       />
                       <span className="w-[86px] font-mono text-[10.5px] text-gray-500 shrink-0 truncate">
@@ -543,7 +651,9 @@ export default function PedidosPage() {
                               {n.cliente} · {num(n.cantidad)}
                             </span>
                             <button
-                              onClick={() => cancelarDemanda(n.note_id, l.product_id)}
+                              onClick={() =>
+                                cancelarDemanda(n.note_id, l.product_id, n.cliente)
+                              }
                               title="el cliente cancelo"
                               className="text-gray-300 hover:text-red-600"
                             >
@@ -655,6 +765,8 @@ export default function PedidosPage() {
         <DetallePedido
           id={detalleId}
           onClose={() => setDetalleId(null)}
+          preguntar={setPregunta}
+          onBorrar={borrarPedido}
           onCambio={(msg) => {
             if (msg) setAviso(msg);
             cargar();
@@ -698,7 +810,158 @@ export default function PedidosPage() {
           }}
         />
       )}
+
+      <Confirmar pregunta={pregunta} onCerrar={() => setPregunta(null)} />
     </main>
+  );
+}
+
+/* ================= historial ================= */
+
+type MovHist = {
+  id: string;
+  tipo: "LLEGADA" | "REPARTO";
+  fecha: string;
+  product_id: string;
+  code: string;
+  description: string;
+  cantidad: number;
+  nota: number | null;
+  cliente: string | null;
+  detalle: string | null;
+  pedido: number | null;
+};
+
+type Hist = {
+  desde: string;
+  hasta: string;
+  llegadas_unidades: number;
+  repartidas_unidades: number;
+  notas_servidas: number;
+  movimientos: MovHist[];
+};
+
+function Historial() {
+  const [h, setH] = useState<Hist | null>(null);
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [cargando, setCargando] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    const { data, error } = await supabase.rpc("orders_history", {
+      p_from: desde || null,
+      p_to: hasta || null,
+      p_limit: 300,
+    });
+    setCargando(false);
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+    setErr(null);
+    setH(data as Hist);
+  }, [desde, hasta]);
+
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="px-3.5 py-2 bg-gray-50 border-b border-gray-100 text-[11.5px] text-gray-600 leading-relaxed">
+        Aqui queda el rastro de todo: cada mercancia que entro y a que nota se le dio.
+        Si un repuesto entro y salio el mismo dia es porque estaba reservado para un
+        cliente que lo esperaba — por eso el stock no sube.
+      </div>
+
+      <div className="flex items-center gap-2 px-3.5 py-2 border-b border-gray-100">
+        <span className="text-[11px] text-gray-400">desde</span>
+        <input
+          type="date"
+          value={desde}
+          onChange={(e) => setDesde(e.target.value)}
+          className="h-7 px-2 border border-gray-200 rounded-lg text-[11.5px]"
+        />
+        <span className="text-[11px] text-gray-400">hasta</span>
+        <input
+          type="date"
+          value={hasta}
+          onChange={(e) => setHasta(e.target.value)}
+          className="h-7 px-2 border border-gray-200 rounded-lg text-[11.5px]"
+        />
+        {h && (
+          <span className="ml-auto text-[11.5px] text-gray-500">
+            entraron <b className="font-medium text-emerald-700">{num(h.llegadas_unidades)}</b>
+            {" · "}se entregaron{" "}
+            <b className="font-medium text-gray-900">{num(h.repartidas_unidades)}</b>
+            {" · "}
+            {h.notas_servidas} notas servidas
+          </span>
+        )}
+      </div>
+
+      <div className="flex gap-2.5 px-3.5 py-1.5 border-b border-gray-300 text-[10px] text-gray-400 uppercase tracking-wide">
+        <span className="w-16">fecha</span>
+        <span className="w-[78px]">que paso</span>
+        <span className="w-[86px]">codigo</span>
+        <span className="flex-1">descripcion</span>
+        <span className="flex-1 min-w-0">destino</span>
+        <span className="w-14 text-right">cant</span>
+      </div>
+
+      {err && <p className="p-3 text-sm text-red-600">{err}</p>}
+      {cargando && <p className="p-4 text-sm text-gray-400">Cargando...</p>}
+
+      {h && h.movimientos.length === 0 && !cargando && (
+        <div className="p-8 text-center">
+          <p className="text-sm text-gray-700 mb-1">No hay movimientos en este rango.</p>
+          <p className="text-xs text-gray-500">
+            Aqui van a aparecer las llegadas de mercancia y los repartos a cada nota.
+          </p>
+        </div>
+      )}
+
+      {h?.movimientos.map((m) => (
+        <div
+          key={`${m.tipo}-${m.id}`}
+          className="flex gap-2.5 px-3.5 py-[7px] border-b border-gray-100 text-[12.5px] items-center"
+        >
+          <span className="w-16 text-gray-500 shrink-0">{m.fecha.slice(5)}</span>
+          <span className="w-[78px] shrink-0">
+            <span
+              className={`text-[10px] px-1.5 py-[1px] rounded-full ${
+                m.tipo === "LLEGADA"
+                  ? "bg-emerald-50 text-emerald-800"
+                  : "bg-violet-50 text-violet-800"
+              }`}
+            >
+              {m.tipo === "LLEGADA" ? "llego" : "se entrego"}
+            </span>
+          </span>
+          <span className="w-[86px] font-mono text-[10.5px] text-gray-500 shrink-0 truncate">
+            {m.code}
+          </span>
+          <span className="flex-1 min-w-0 truncate">{m.description}</span>
+          <span className="flex-1 min-w-0 truncate text-gray-600">
+            {m.tipo === "LLEGADA"
+              ? m.detalle ?? "entro al almacen"
+              : `nota ${m.nota ?? "?"}${m.cliente ? ` · ${m.cliente}` : ""}${
+                  m.pedido ? ` · P-${String(m.pedido).padStart(4, "0")}` : ""
+                }`}
+          </span>
+          <span
+            className={`w-14 text-right shrink-0 ${
+              m.cantidad > 0 ? "text-emerald-700" : "text-violet-700"
+            }`}
+          >
+            {m.cantidad > 0 ? "+" : ""}
+            {num(m.cantidad)}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -792,11 +1055,15 @@ function DetallePedido({
   onClose,
   onCambio,
   onRecibir,
+  preguntar,
+  onBorrar,
 }: {
   id: string;
   onClose: () => void;
   onCambio: (msg?: string) => void;
   onRecibir: (it: ItemPedido) => void;
+  preguntar: (p: Pregunta) => void;
+  onBorrar: (id: string, numero: number) => void;
 }) {
   const [d, setD] = useState<Detalle | null>(null);
   const [editando, setEditando] = useState(false);
@@ -821,10 +1088,20 @@ function DetallePedido({
   }, [cargar]);
 
   async function abrirFacturas() {
-    if (!d?.supplier_id) return;
-    const { data } = await supabase.rpc("invoices_for_supplier", {
+    if (!d?.supplier_id) {
+      setErr(
+        "Este pedido no tiene proveedor, asi que no hay facturas que enlazar. Asignale el proveedor primero."
+      );
+      return;
+    }
+    setErr(null);
+    const { data, error } = await supabase.rpc("invoices_for_supplier", {
       p_supplier_id: d.supplier_id,
     });
+    if (error) {
+      setErr(error.message);
+      return;
+    }
     setFacturas((data ?? []) as typeof facturas);
     setVerFact(true);
   }
@@ -861,15 +1138,40 @@ function DetallePedido({
     onCambio();
   }
 
-  async function cancelar() {
-    if (!confirm("¿Cancelar este pedido? Sus lineas vuelven a Por pedir.")) return;
-    const { error } = await supabase.rpc("cancel_purchase_order", { p_id: id });
-    if (error) {
-      setErr(error.message);
-      return;
-    }
-    cargar();
-    onCambio("Pedido cancelado. Sus lineas volvieron a Por pedir.");
+  function cancelar() {
+    if (!d) return;
+    preguntar({
+      titulo: `Cancelar el pedido P-${String(d.numero).padStart(4, "0")}`,
+      mensaje:
+        "Sus lineas vuelven a aparecer en Por pedir y vas a poder pedirlas otra vez.",
+      detalle: "El pedido queda guardado como cancelado. Despues puedes borrarlo o reabrirlo.",
+      textoOk: "Si, cancelar",
+      tono: "peligro",
+      onSi: async () => {
+        const { error } = await supabase.rpc("cancel_purchase_order", { p_id: id });
+        if (error) {
+          setErr(error.message);
+          return;
+        }
+        cargar();
+        onCambio("Pedido cancelado. Sus lineas volvieron a Por pedir.");
+      },
+    });
+  }
+
+  function borrar() {
+    if (!d) return;
+    preguntar({
+      titulo: `Borrar el pedido P-${String(d.numero).padStart(4, "0")}`,
+      mensaje: "Este pedido desaparece para siempre. No se puede deshacer.",
+      detalle:
+        d.total_recibido > 0
+          ? "Este pedido ya recibio mercancia, asi que el sistema no va a dejar borrarlo."
+          : "Como no recibio nada, borrarlo no afecta tu inventario.",
+      textoOk: "Si, borrarlo",
+      tono: "peligro",
+      onSi: () => onBorrar(id, d.numero),
+    });
   }
 
   async function reabrir() {
@@ -940,9 +1242,27 @@ function DetallePedido({
         <div className="w-px bg-gray-200 my-1.5 mx-1.5" />
         <Accion icono="⚯" label="enlazar factura" onClick={abrirFacturas} />
         {d.status === "CANCELADO" ? (
-          <Accion icono="↺" label="reabrir" onClick={reabrir} />
+          <>
+            <Accion icono="↺" label="reabrir" onClick={reabrir} />
+            <Accion
+              icono="🗑"
+              label="borrar"
+              tono="danger"
+              onClick={borrar}
+              disabled={d.total_recibido > 0}
+            />
+          </>
         ) : (
-          <Accion icono="✕" label="cancelar" tono="danger" onClick={cancelar} />
+          <>
+            <Accion icono="✕" label="cancelar" tono="danger" onClick={cancelar} />
+            <Accion
+              icono="🗑"
+              label="borrar"
+              tono="danger"
+              onClick={borrar}
+              disabled={d.total_recibido > 0}
+            />
+          </>
         )}
       </div>
 
