@@ -2,7 +2,26 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  BarChart3,
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  FilePlus2,
+  HandCoins,
+  Package,
+  Receipt,
+  ScrollText,
+  ShoppingCart,
+  Undo2,
+  UserPlus,
+  Warehouse,
+  type LucideIcon,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { ToolbarButton, ToolbarSeparator } from "@/components/ui";
+import { Barra } from "@/components/Ventana";
 
 type Daily = { date: string; total: number; notes: number };
 type TopClient = { name: string; total: number; notes: number };
@@ -71,58 +90,23 @@ function rangeLabel(start: string, end: string) {
   return `${a.getDate()} ${MESES_CORTOS[a.getMonth()]} al ${b.getDate()} ${MESES_CORTOS[b.getMonth()]}`;
 }
 
-const ACCESOS = [
-  {
-    href: "/notas/nueva",
-    titulo: "Nueva nota",
-    sub: "vender y entregar",
-    icono: "＋",
-    chip: "bg-blue-50 text-blue-800",
-    borde: "border-gray-300",
-  },
-  {
-    href: "/notas",
-    titulo: "Ver notas",
-    sub: "historial y busqueda",
-    icono: "☷",
-    chip: "bg-gray-100 text-gray-700",
-    borde: "border-gray-200",
-  },
-  {
-    href: "/cobranzas",
-    titulo: "Cobranzas",
-    sub: "quien debe y abonos",
-    icono: "◍",
-    chip: "bg-emerald-50 text-emerald-800",
-    borde: "border-gray-200",
-  },
-  {
-    href: "/compras",
-    titulo: "Compras",
-    sub: "facturas de proveedor",
-    icono: "▩",
-    chip: "bg-orange-50 text-orange-800",
-    borde: "border-gray-200",
-  },
-  {
-    href: "/productos",
-    titulo: "Productos",
-    sub: "precios y costos",
-    icono: "▦",
-    chip: "bg-violet-50 text-violet-800",
-    borde: "border-gray-200",
-  },
-  {
-    href: "/informes",
-    titulo: "Informes",
-    sub: "arma el tuyo por fechas",
-    icono: "▧",
-    chip: "bg-gray-100 text-gray-700",
-    borde: "border-gray-200",
-  },
+const ACCESOS: {
+  href: string;
+  titulo: string;
+  sub: string;
+  icono: LucideIcon;
+  chip: string;
+}[] = [
+  { href: "/notas/nueva", titulo: "Nueva nota", sub: "vender y entregar", icono: FilePlus2, chip: "bg-brand-50 text-brand-700" },
+  { href: "/notas", titulo: "Ver notas", sub: "historial y busqueda", icono: ScrollText, chip: "bg-gray-100 text-gray-700" },
+  { href: "/cobranzas", titulo: "Cobranzas", sub: "quien debe y abonos", icono: HandCoins, chip: "bg-emerald-50 text-emerald-700" },
+  { href: "/compras", titulo: "Compras", sub: "facturas de proveedor", icono: Receipt, chip: "bg-orange-50 text-orange-700" },
+  { href: "/productos", titulo: "Productos", sub: "precios y costos", icono: Package, chip: "bg-violet-50 text-violet-700" },
+  { href: "/informes", titulo: "Informes", sub: "arma el tuyo por fechas", icono: BarChart3, chip: "bg-sky-50 text-sky-700" },
 ];
 
 export default function Home() {
+  const router = useRouter();
   const [data, setData] = useState<Resumen | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -207,7 +191,21 @@ export default function Home() {
     : "";
 
   return (
-    <main className="p-8 max-w-5xl">
+    <main className="p-6 max-w-[1180px]">
+      <Barra>
+        <ToolbarButton icon={FilePlus2} label="nueva nota" tone="brand" onClick={() => router.push("/notas/nueva")} />
+        <ToolbarButton icon={HandCoins} label="cobrar" tone="success" onClick={() => router.push("/cobranzas")} />
+        <ToolbarButton icon={ScrollText} label="notas" onClick={() => router.push("/notas")} />
+        <ToolbarSeparator />
+        <ToolbarButton icon={Receipt} label="factura compra" onClick={() => router.push("/compras")} />
+        <ToolbarButton icon={ShoppingCart} label="pedidos" onClick={() => router.push("/pedidos")} />
+        <ToolbarButton icon={Warehouse} label="inventario" onClick={() => router.push("/inventario")} />
+        <ToolbarSeparator />
+        <ToolbarButton icon={UserPlus} label="clientes" onClick={() => router.push("/clientes")} />
+        <ToolbarButton icon={Undo2} label="devoluciones" onClick={() => router.push("/devoluciones")} />
+        <ToolbarButton icon={BarChart3} label="informes" onClick={() => router.push("/informes")} />
+      </Barra>
+
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
           {error}
@@ -218,7 +216,7 @@ export default function Home() {
       <div
         onMouseEnter={() => setQuieto(true)}
         onMouseLeave={() => setQuieto(false)}
-        className="bg-white border border-gray-200 rounded-xl p-5 mb-6"
+        className="bg-white border border-gray-200 rounded-xl shadow-card p-5 mb-5"
       >
         <div className="relative min-h-[296px]">
           {/* ---------- panel 1: resumen ---------- */}
@@ -241,15 +239,16 @@ export default function Home() {
                     setModo("semana");
                     setOffset((o) => o - 1);
                   }}
-                  className="w-7 h-7 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  className="w-7 h-7 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center justify-center"
                   aria-label="Anterior"
                 >
-                  ‹
+                  <ChevronLeft size={15} />
                 </button>
                 <button
                   onClick={() => setAbreCal((v) => !v)}
-                  className="h-7 px-2.5 rounded-lg border border-gray-200 text-[12px] text-gray-700 hover:bg-gray-50"
+                  className="h-7 px-2.5 rounded-lg border border-gray-200 text-[12px] text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1.5"
                 >
+                  <CalendarDays size={13} className="text-gray-400" />
                   {data ? rangeLabel(data.start, data.end) : "fechas"}
                 </button>
                 <button
@@ -258,14 +257,14 @@ export default function Home() {
                     setOffset((o) => Math.min(o + 1, 0));
                   }}
                   disabled={modo === "semana" && offset === 0}
-                  className="w-7 h-7 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30"
+                  className="w-7 h-7 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 flex items-center justify-center"
                   aria-label="Siguiente"
                 >
-                  ›
+                  <ChevronRight size={15} />
                 </button>
 
                 {abreCal && (
-                  <div className="absolute right-0 top-9 z-30 bg-white border border-gray-200 rounded-xl shadow-xl p-3 w-72">
+                  <div className="absolute right-0 top-9 z-30 bg-white border border-gray-200 rounded-xl shadow-pop p-3 w-72">
                     <div className="flex gap-2 mb-2.5">
                       <div className="flex-1">
                         <label className="block text-[10.5px] text-gray-500 mb-1">Desde</label>
@@ -293,7 +292,7 @@ export default function Home() {
                           setAbreCal(false);
                         }
                       }}
-                      className="w-full h-8 rounded-lg bg-gray-900 text-white text-xs mb-3 hover:bg-gray-700"
+                      className="w-full h-8 rounded-lg bg-brand-700 text-white text-xs mb-3 hover:bg-brand-800"
                     >
                       Ver este periodo
                     </button>
@@ -363,7 +362,7 @@ export default function Home() {
                     return (
                       <div key={d.date} className="flex-1 text-center group relative">
                         <div
-                          className="bg-blue-200 group-hover:bg-blue-500 rounded-t transition-colors"
+                          className="bg-brand-200 group-hover:bg-brand-600 rounded-t transition-colors"
                           style={{ height: `${Math.max(alto, 2)}px` }}
                         />
                         <div className="text-[10px] text-gray-400 mt-1">{etq}</div>
@@ -403,12 +402,12 @@ export default function Home() {
                 <Link
                   key={a.href}
                   href={a.href}
-                  className={`border ${a.borde} rounded-xl p-3 hover:border-gray-400 hover:shadow-sm transition-all`}
+                  className="border border-gray-200 rounded-xl p-3 hover:border-brand-200 hover:bg-brand-50/30 hover:shadow-card transition-all"
                 >
                   <span
-                    className={`w-8 h-8 rounded-[9px] ${a.chip} flex items-center justify-center text-base mb-1.5`}
+                    className={`w-8 h-8 rounded-[9px] ${a.chip} flex items-center justify-center mb-1.5`}
                   >
-                    {a.icono}
+                    <a.icono size={16} />
                   </span>
                   <div className="text-[13.5px] text-gray-900">{a.titulo}</div>
                   <div className="text-[11px] text-gray-500">{a.sub}</div>
@@ -425,7 +424,7 @@ export default function Home() {
               onClick={() => setPanel(i)}
               aria-label={`Ver panel ${i + 1}`}
               className={`w-[7px] h-[7px] rounded-full ${
-                panel === i ? "bg-gray-700" : "bg-gray-300"
+                panel === i ? "bg-brand-700" : "bg-gray-300"
               }`}
             />
           ))}
@@ -438,7 +437,7 @@ export default function Home() {
       {/* ===================== detalle ===================== */}
       {data && (
         <div className="grid md:grid-cols-2 gap-5">
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-card p-5">
             <p className="text-xs text-gray-500 mb-3">Mejores clientes</p>
             {data.top_clients.length === 0 && (
               <p className="text-sm text-gray-400">Sin ventas en este periodo.</p>
@@ -453,7 +452,7 @@ export default function Home() {
                   </div>
                   <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-teal-500"
+                      className="h-full bg-brand-500"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -462,7 +461,7 @@ export default function Home() {
             })}
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-card p-5">
             <p className="text-xs text-gray-500 mb-3">Lo que mas se movio</p>
             {data.top_products.length === 0 && (
               <p className="text-sm text-gray-400">Sin ventas en este periodo.</p>
@@ -488,7 +487,7 @@ export default function Home() {
       )}
 
       {data && (data.products_no_cost > 0 || data.low_margin_notes > 0) && (
-        <div className="mt-5 bg-white border border-gray-200 rounded-xl p-5">
+        <div className="mt-5 bg-white border border-gray-200 rounded-xl shadow-card p-5">
           <p className="text-xs text-gray-500 mb-2.5">Cosas que revisar</p>
           {data.products_no_cost > 0 && (
             <Link
