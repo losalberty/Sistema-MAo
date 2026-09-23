@@ -3,7 +3,9 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeft, Pencil, Printer, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { confirmar, notify } from "@/components/ui";
 
 type Item = {
   code_snapshot: string;
@@ -51,12 +53,20 @@ function VerNotaInner() {
 
   async function handleDelete() {
     if (!id) return;
-    if (!confirm("¿Eliminar esta nota? Esta accion no se puede deshacer.")) return;
+    const ok = await confirmar({
+      titulo: note ? `¿Eliminar la nota #${note.sequence_number}?` : "¿Eliminar esta nota?",
+      mensaje: "Esta accion no se puede deshacer.",
+      detalle: note ? `${note.display_name} · $${note.total.toFixed(2)}` : undefined,
+      textoSi: "Si, eliminar",
+      peligro: true,
+    });
+    if (!ok) return;
     const { error } = await supabase.rpc("delete_note", { p_note_id: id });
     if (error) {
-      setError(error.message);
+      notify.error("No se pudo eliminar", error.message);
       return;
     }
+    notify.ok("Nota eliminada");
     window.location.href = "/notas";
   }
 
@@ -74,27 +84,30 @@ function VerNotaInner() {
   return (
     <div className="max-w-2xl mx-auto p-8">
       <div className="flex items-center justify-between mb-6 print:hidden">
-        <Link href="/notas" className="text-sm text-gray-500 hover:text-gray-900">
-          ← Volver a notas
+        <Link
+          href="/notas"
+          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900"
+        >
+          <ArrowLeft size={15} /> Volver a notas
         </Link>
         <div className="flex gap-2">
           <Link
             href={`/notas/nueva?id=${note.id}`}
-            className="text-sm border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
+            className="h-9 px-3 inline-flex items-center gap-1.5 text-sm rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
           >
-            Editar
+            <Pencil size={15} /> Editar
           </Link>
           <button
             onClick={handleDelete}
-            className="text-sm border border-gray-300 rounded-md px-3 py-1.5 text-red-500 hover:bg-red-500 hover:text-white hover:border-red-500 transition-colors"
+            className="h-9 px-3 inline-flex items-center gap-1.5 text-sm rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50"
           >
-            Eliminar
+            <Trash2 size={15} /> Eliminar
           </button>
           <button
             onClick={() => window.print()}
-            className="text-sm bg-gray-900 text-white rounded-md px-3 py-1.5 hover:bg-gray-700 transition-colors"
+            className="h-9 px-4 inline-flex items-center gap-1.5 text-sm font-medium rounded-lg bg-brand-700 text-white hover:bg-brand-800 shadow-sm"
           >
-            Imprimir / Descargar PDF
+            <Printer size={15} /> Imprimir / PDF
           </button>
         </div>
       </div>
