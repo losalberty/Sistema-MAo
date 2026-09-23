@@ -2,8 +2,29 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import {
+  Ban,
+  Check,
+  CircleHelp,
+  ClipboardList,
+  FilePlus2,
+  Filter,
+  Link2,
+  MessageCircle,
+  PackagePlus,
+  Pencil,
+  Plus,
+  Printer,
+  RotateCcw,
+  Search,
+  Trash2,
+  Truck,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Confirmar, { type Pregunta } from "@/components/Confirmar";
+import { EmptyState, NumInput, ToolbarButton, notify } from "@/components/ui";
 
 type Resumen = {
   abiertos: number;
@@ -113,7 +134,23 @@ function num(n: number) {
   return Number.isInteger(v) ? String(v) : v.toFixed(2);
 }
 
-/* ---------- boton de barra: icono arriba, etiqueta abajo ---------- */
+/* ---------- boton de barra: icono arriba, etiqueta abajo ----------
+ * Antes dibujaba simbolos de texto. Ahora traduce cada simbolo a su icono
+ * de verdad, asi los botones de toda la pantalla cambian con un solo ajuste. */
+const ICONO_DE: Record<string, LucideIcon> = {
+  "＋": FilePlus2,
+  "⌂": Truck,
+  "≡": Filter,
+  "↓": Pencil,
+  "✓": Check,
+  "✆": MessageCircle,
+  "⎙": Printer,
+  "⚯": Link2,
+  "↺": RotateCcw,
+  "✕": Ban,
+  "🗑": Trash2,
+};
+
 function Accion({
   icono,
   label,
@@ -127,23 +164,14 @@ function Accion({
   tono?: "accent" | "success" | "danger";
   disabled?: boolean;
 }) {
-  const color =
-    tono === "accent"
-      ? "text-indigo-700 hover:bg-indigo-50"
-      : tono === "success"
-      ? "text-emerald-700 hover:bg-emerald-50"
-      : tono === "danger"
-      ? "text-red-600 hover:bg-red-50"
-      : "text-gray-600 hover:bg-gray-100";
   return (
-    <button
+    <ToolbarButton
+      icon={ICONO_DE[icono] ?? CircleHelp}
+      label={label}
       onClick={onClick}
       disabled={disabled}
-      className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg ${color} disabled:opacity-30 disabled:hover:bg-transparent`}
-    >
-      <span className="text-[17px] leading-none">{icono}</span>
-      <span className="text-[10px] leading-none">{label}</span>
-    </button>
+      tone={tono === "accent" ? "brand" : tono === "success" ? "success" : tono === "danger" ? "danger" : "neutral"}
+    />
   );
 }
 
@@ -154,7 +182,10 @@ export default function PedidosPage() {
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [aviso, setAviso] = useState<string | null>(null);
+  // los mensajes de "listo" ahora son avisos flotantes que se van solos
+  const setAviso = (m: string | null) => {
+    if (m) notify.ok(m);
+  };
   const [pregunta, setPregunta] = useState<Pregunta | null>(null);
 
   const [tab, setTab] = useState<"pedir" | "pedidos" | "historial">("pedir");
@@ -164,6 +195,7 @@ export default function PedidosPage() {
   const [cant, setCant] = useState<Record<string, string>>({});
 
   const [asignar, setAsignar] = useState(false);
+  const [nuevoManual, setNuevoManual] = useState(false);
   const [detalleId, setDetalleId] = useState<string | null>(null);
   const [recibir, setRecibir] = useState<{
     productId: string;
@@ -358,14 +390,6 @@ export default function PedidosPage() {
           </button>
         </div>
       )}
-      {aviso && (
-        <div className="mb-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800 flex">
-          {aviso}
-          <button onClick={() => setAviso(null)} className="ml-auto text-emerald-600">
-            ×
-          </button>
-        </div>
-      )}
 
       <div className="flex gap-2 mb-3">
         <button
@@ -386,7 +410,7 @@ export default function PedidosPage() {
               : "border border-gray-200 text-gray-600 hover:bg-gray-50"
           }`}
         >
-          Pedidos ({pedidos.length})
+          Pedidos hechos ({pedidos.length})
         </button>
         <button
           onClick={() => setTab("historial")}
@@ -710,7 +734,30 @@ export default function PedidosPage() {
 
       {/* ================= PEDIDOS ================= */}
       {tab === "pedidos" && !detalleId && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-card overflow-hidden">
+          <div className="flex items-start gap-3 px-3.5 py-2.5 bg-gray-50 border-b border-gray-100">
+            <ClipboardList size={18} className="text-brand-600 shrink-0 mt-0.5" />
+            <p className="flex-1 text-[12px] leading-relaxed text-gray-600">
+              Aqui estan los <b className="font-medium text-gray-800">pedidos que ya le hiciste a tus proveedores</b>.
+              Cada uno es un documento: haz clic en uno para verlo, recibir lo que llego,
+              mandarlo por WhatsApp o cancelarlo. Se crean de dos formas: desde{" "}
+              <button
+                onClick={() => setTab("pedir")}
+                className="text-brand-700 underline underline-offset-2"
+              >
+                Por pedir
+              </button>{" "}
+              (lo que te falta) o a mano con el boton de la derecha.
+            </p>
+            <button
+              onClick={() => setNuevoManual(true)}
+              className="shrink-0 h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-brand-700 text-white text-[12.5px] font-medium shadow-sm hover:bg-brand-800"
+            >
+              <Plus size={15} strokeWidth={2} />
+              Nuevo pedido
+            </button>
+          </div>
+
           <div className="flex gap-2.5 px-3.5 py-1.5 border-b border-gray-300 text-[10px] text-gray-400 uppercase tracking-wide">
             <span className="w-16">pedido</span>
             <span className="w-20">fecha</span>
@@ -721,9 +768,31 @@ export default function PedidosPage() {
             <span className="w-20">estado</span>
           </div>
           {pedidos.length === 0 && (
-            <p className="p-6 text-sm text-gray-400 text-center">
-              Todavia no has generado ningun pedido.
-            </p>
+            <EmptyState
+              icon={ClipboardList}
+              title="Todavia no le has hecho pedidos a ningun proveedor"
+              action={
+                <div className="flex gap-2 justify-center">
+                  <button
+                    onClick={() => setTab("pedir")}
+                    className="h-9 px-3.5 rounded-lg border border-gray-300 text-[12.5px] text-gray-700 hover:bg-gray-50"
+                  >
+                    Ver lo que falta pedir
+                  </button>
+                  <button
+                    onClick={() => setNuevoManual(true)}
+                    className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-lg bg-brand-700 text-white text-[12.5px] font-medium hover:bg-brand-800"
+                  >
+                    <Plus size={15} strokeWidth={2} />
+                    Crear un pedido a mano
+                  </button>
+                </div>
+              }
+            >
+              Cuando marques repuestos en Por pedir y le des a generar pedido, van a aparecer
+              aqui. Tambien puedes armar uno directo, por ejemplo cuando vas a surtir el
+              almacen con un proveedor.
+            </EmptyState>
           )}
           {pedidos.map((p) => {
             const e = ESTADO_PEDIDO[p.status] ?? ESTADO_PEDIDO.ABIERTO;
@@ -779,6 +848,24 @@ export default function PedidosPage() {
               falta: it.falta,
             })
           }
+        />
+      )}
+
+      {nuevoManual && (
+        <NuevoPedidoManual
+          provs={provs}
+          onClose={() => setNuevoManual(false)}
+          onCreado={(orderId, numero, lineasN) => {
+            setNuevoManual(false);
+            setAviso(
+              `Pedido P-${String(numero).padStart(4, "0")} creado con ${lineasN} ${
+                lineasN === 1 ? "linea" : "lineas"
+              }.`
+            );
+            setTab("pedidos");
+            setDetalleId(orderId);
+            cargar();
+          }}
         />
       )}
 
@@ -961,6 +1048,303 @@ function Historial() {
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ================= nuevo pedido a mano ================= */
+/*
+ * Para cuando quieres surtir el almacen o pedir algo que no nace de una nota:
+ * eliges el proveedor, buscas los repuestos por codigo o nombre, pones
+ * cantidades y listo. El pedido queda igual que uno generado desde Por pedir.
+ */
+
+type ProductoHit = {
+  id: string;
+  code: string;
+  description: string;
+  cost?: number | null;
+  stock_quantity?: number | null;
+};
+
+type LineaManual = { product_id: string; code: string; description: string; cantidad: number };
+
+function NuevoPedidoManual({
+  provs,
+  onClose,
+  onCreado,
+}: {
+  provs: Proveedor[];
+  onClose: () => void;
+  onCreado: (orderId: string, numero: number, lineas: number) => void;
+}) {
+  const [proveedor, setProveedor] = useState("");
+  const [lineas, setLineas] = useState<LineaManual[]>([]);
+  const [texto, setTexto] = useState("");
+  const [hits, setHits] = useState<ProductoHit[]>([]);
+  const [activo, setActivo] = useState(0);
+  const [notas, setNotas] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const seq = useMemo(() => ({ n: 0 }), []);
+
+  async function buscar(t: string) {
+    setTexto(t);
+    const mio = ++seq.n;
+    if (t.trim().length < 2) {
+      setHits([]);
+      return;
+    }
+    const { data } = await supabase.rpc("search_products", { search_text: t.trim() });
+    if (mio !== seq.n) return;
+    setHits(((data ?? []) as ProductoHit[]).slice(0, 8));
+    setActivo(0);
+  }
+
+  function agregar(p: ProductoHit) {
+    seq.n++;
+    setLineas((prev) => {
+      const ya = prev.find((l) => l.product_id === p.id);
+      if (ya) {
+        return prev.map((l) =>
+          l.product_id === p.id ? { ...l, cantidad: l.cantidad + 1 } : l
+        );
+      }
+      return [...prev, { product_id: p.id, code: p.code, description: p.description, cantidad: 1 }];
+    });
+    setTexto("");
+    setHits([]);
+    setErr(null);
+  }
+
+  function tecla(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (hits.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActivo((a) => Math.min(a + 1, hits.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActivo((a) => Math.max(a - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const norm = (s: string) => s.replace(/\s+/g, "").toUpperCase();
+      const exacto = hits.find((h) => norm(h.code) === norm(texto));
+      agregar(exacto ?? hits[activo] ?? hits[0]);
+    } else if (e.key === "Escape") {
+      setHits([]);
+    }
+  }
+
+  async function crear() {
+    setErr(null);
+    if (!proveedor) {
+      setErr("Elige el proveedor.");
+      return;
+    }
+    const validas = lineas.filter((l) => l.cantidad > 0);
+    if (validas.length === 0) {
+      setErr("Agrega al menos un repuesto con cantidad.");
+      return;
+    }
+    setBusy(true);
+    const { data, error } = await supabase.rpc("create_purchase_order", {
+      p_supplier_id: proveedor,
+      p_items: validas.map((l) => ({ product_id: l.product_id, cantidad: l.cantidad })),
+      p_order_date: null,
+      p_notes: notas.trim() || null,
+    });
+    setBusy(false);
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+    const r = data as { order_id: string; numero: number; lineas: number };
+    onCreado(r.order_id, r.numero, r.lineas);
+  }
+
+  const unidades = lineas.reduce((s, l) => s + (l.cantidad || 0), 0);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-[2px]"
+      onMouseDown={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="nuevo-pedido-titulo"
+    >
+      <div
+        className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-pop border border-gray-200/80 overflow-hidden"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3 px-5 pt-4 pb-3 border-b border-gray-100">
+          <span className="w-9 h-9 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+            <PackagePlus size={18} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <h2 id="nuevo-pedido-titulo" className="text-[16px] font-semibold text-gray-900">
+              Nuevo pedido a proveedor
+            </h2>
+            <p className="text-[12px] text-gray-500">
+              Elige a quien le vas a pedir y agrega los repuestos.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-gray-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-5 py-4">
+          <label className="block text-[11px] text-gray-500 mb-1">Proveedor</label>
+          <select
+            value={proveedor}
+            onChange={(e) => setProveedor(e.target.value)}
+            className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-[13px] mb-4 bg-white"
+          >
+            <option value="">Elige el proveedor...</option>
+            {provs.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+
+          <label className="block text-[11px] text-gray-500 mb-1">Agregar repuesto</label>
+          <div className="relative mb-3">
+            <Search
+              size={14}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+            />
+            <input
+              value={texto}
+              onChange={(e) => buscar(e.target.value)}
+              onKeyDown={tecla}
+              placeholder="Codigo o nombre, y Enter"
+              className="w-full h-9 pl-8 pr-2.5 border border-gray-300 rounded-lg text-[13px]"
+            />
+            {hits.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-10 bg-white border border-gray-200 rounded-xl shadow-pop p-1">
+                {hits.map((h, k) => (
+                  <button
+                    key={h.id}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      agregar(h);
+                    }}
+                    onMouseEnter={() => setActivo(k)}
+                    className={`w-full flex items-baseline gap-2.5 px-2.5 py-1.5 rounded-lg text-left ${
+                      k === activo ? "bg-brand-50" : ""
+                    }`}
+                  >
+                    <span className="w-24 shrink-0 font-mono text-[10.5px] text-gray-500 truncate">
+                      {h.code}
+                    </span>
+                    <span className="flex-1 min-w-0 truncate text-[12.5px] text-gray-800">
+                      {h.description}
+                    </span>
+                    {h.stock_quantity != null && (
+                      <span className="shrink-0 text-[11px] text-gray-400">
+                        hay {num(Number(h.stock_quantity))}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {lineas.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-[12.5px] text-gray-400">
+              Todavia no agregaste repuestos a este pedido.
+            </div>
+          ) : (
+            <div className="rounded-xl border border-gray-200 overflow-hidden">
+              <div className="flex gap-2.5 px-3 py-1.5 border-b border-gray-200 bg-gray-50 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                <span className="w-24">codigo</span>
+                <span className="flex-1">descripcion</span>
+                <span className="w-20 text-right">cantidad</span>
+                <span className="w-7" />
+              </div>
+              {lineas.map((l, i) => (
+                <div
+                  key={l.product_id}
+                  className={`flex gap-2.5 items-center px-3 py-1.5 text-[12.5px] ${
+                    i ? "border-t border-gray-100" : ""
+                  }`}
+                >
+                  <span className="w-24 font-mono text-[10.5px] text-gray-500 truncate">
+                    {l.code}
+                  </span>
+                  <span className="flex-1 min-w-0 truncate">{l.description}</span>
+                  <span className="w-20 flex justify-end">
+                    <NumInput
+                      value={l.cantidad}
+                      onChange={(n) =>
+                        setLineas((prev) =>
+                          prev.map((x) =>
+                            x.product_id === l.product_id ? { ...x, cantidad: n } : x
+                          )
+                        )
+                      }
+                      className="w-16 h-7 px-2 border border-gray-300 rounded-md text-right text-[12.5px]"
+                      ariaLabel={`Cantidad de ${l.description}`}
+                    />
+                  </span>
+                  <button
+                    onClick={() =>
+                      setLineas((prev) => prev.filter((x) => x.product_id !== l.product_id))
+                    }
+                    aria-label={`Quitar ${l.description}`}
+                    className="w-7 h-7 rounded-md flex items-center justify-center text-gray-300 hover:text-red-600 hover:bg-red-50"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <label className="block text-[11px] text-gray-500 mt-4 mb-1">
+            Nota para el pedido (opcional)
+          </label>
+          <input
+            value={notas}
+            onChange={(e) => setNotas(e.target.value)}
+            placeholder="Ej: que venga en la ruta del jueves"
+            className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-[13px]"
+          />
+
+          {err && (
+            <p className="mt-3 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-[12.5px] text-red-700">
+              {err}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 px-5 py-3 bg-gray-50/80 border-t border-gray-100">
+          <span className="text-[12px] text-gray-500">
+            {lineas.length} {lineas.length === 1 ? "repuesto" : "repuestos"} · {num(unidades)}{" "}
+            unidades
+          </span>
+          <button
+            onClick={onClose}
+            className="ml-auto h-9 px-4 rounded-lg text-[13px] text-gray-700 hover:bg-gray-200/60"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={crear}
+            disabled={busy}
+            className="h-9 inline-flex items-center gap-1.5 px-4 rounded-lg bg-brand-700 text-white text-[13px] font-medium shadow-sm hover:bg-brand-800 disabled:opacity-40"
+          >
+            <FilePlus2 size={15} strokeWidth={2} />
+            {busy ? "Creando..." : "Crear pedido"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
