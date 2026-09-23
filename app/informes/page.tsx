@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { Check, FileSpreadsheet, Printer, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { SkeletonRows, ToolbarButton, ToolbarSeparator, notify } from "@/components/ui";
+import { Barra, Campo, Encabezado, Segmento, descargarExcel } from "@/components/Ventana";
 
 type Totals = {
   sales: number;
@@ -114,6 +116,7 @@ export default function InformesPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [armar, setArmar] = useState(false);
 
   useEffect(() => {
     if (kind === "personalizado") return;
@@ -126,14 +129,21 @@ export default function InformesPage() {
     setSections((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
   }
 
-  async function generate() {
+  const generate = useCallback(async () => {
+    if (!from || !to) return;
     setLoading(true);
     setError(null);
     const { data, error } = await supabase.rpc("report_data", { p_from: from, p_to: to });
     setLoading(false);
     if (error) return setError(error.message);
     setReport(data as Report);
-  }
+  }, [from, to]);
+
+  // el informe se arma solo al cambiar el periodo
+  useEffect(() => {
+    const t = setTimeout(generate, 300);
+    return () => clearTimeout(t);
+  }, [generate]);
 
   const active = (k: SectionKey) => sections.includes(k);
   const t = report?.totals;
@@ -142,44 +152,85 @@ export default function InformesPage() {
     ? Math.max(...report.by_day.map((d) => Number(d.total)))
     : 0;
 
+  const presetActivo = PRESETS.find(
+    (p) => p.sections.length === sections.length && p.sections.every((s) => sections.includes(s))
+  )?.label;
+
+  function exportar() {
+    if (!report) return;
+    const filas: (string | number)[][] = [];
+    const bloque = (titulo: string, head: string[], rows: (string | number)[][]) => {
+      filas.push([titulo], head, ...rows, []);
+    };
+    if (active("by_day"))
+      bloque("Por dia", ["Fecha", "Notas", "Vendido"], report.by_day.map((d) => [d.date, d.notes, Number(d.total).toFixed(2)]));
+    if (active("by_product"))
+      bloque(
+        "Por producto",
+        ["Codigo", "Descripcion", "Cantidad", "Vendido", "Costo"],
+        report.by_product.map((p) => [p.code, p.description, Number(p.quantity), Number(p.total).toFixed(2), Number(p.cost).toFixed(2)])
+      );
+    if (active("by_client"))
+      bloque(
+        "Por cliente",
+        ["Cliente", "Ciudad", "Notas", "Vendido", "Por cobrar"],
+        report.by_client.map((c) => [c.name, c.city ?? "", c.notes, Number(c.total).toFixed(2), Number(c.pending).toFixed(2)])
+      );
+    if (active("by_category"))
+      bloque("Por grupo", ["Grupo", "Unidades", "Vendido"], report.by_category.map((c) => [c.name, Number(c.quantity), Number(c.total).toFixed(2)]));
+    if (active("by_city"))
+      bloque("Por ciudad", ["Ciudad", "Clientes", "Notas", "Vendido"], report.by_city.map((c) => [c.name, c.clients, c.notes, Number(c.total).toFixed(2)]));
+    if (active("by_state"))
+      bloque("Por estado", ["Estado", "Clientes", "Notas", "Vendido"], report.by_state.map((c) => [c.name, c.clients, c.notes, Number(c.total).toFixed(2)]));
+    if (active("by_status"))
+      bloque("Por cobro", ["Estado", "Notas", "Monto"], report.by_status.map((c) => [c.name, c.notes, Number(c.total).toFixed(2)]));
+    if (active("by_currency"))
+      bloque("Por moneda", ["Moneda", "Notas", "Monto USD"], report.by_currency.map((c) => [c.name, c.notes, Number(c.total).toFixed(2)]));
+    if (active("notes_list"))
+      bloque(
+        "Listado de notas",
+        ["N", "Fecha", "Cliente", "Cobro", "Total"],
+        report.notes_list.map((n) => [n.number, n.date, n.client, n.status, Number(n.total).toFixed(2)])
+      );
+    descargarExcel(`informe-${from}-a-${to}`, ["Informe de ventas", `Del ${from} al ${to}`], filas);
+    notify.ok("Archivo descargado");
+  }
+
   return (
-    <main className="max-w-5xl mx-auto p-8">
+    <main className="p-6 max-w-[1180px] print:p-0">
       {/* ---------- controles ---------- */}
       <div className="print:hidden">
-        <Link href="/" className="text-sm text-gray-500 hover:text-indigo-600 inline-block mb-2 transition-colors">
-          ← Volver al panel
-        </Link>
-        <h1 className="text-lg font-medium mb-1">Informes</h1>
-        <p className="text-sm text-gray-500 mb-6">
-          Elige un periodo, marca lo que quieres ver, y genera.
-        </p>
+        <Encabezado titulo="Informes">Elige el periodo y lo que quieres ver. Se arma solo.</Encabezado>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
-          <p className="text-xs text-gray-400 mb-3">Periodo</p>
-          <div className="flex gap-2 flex-wrap mb-4">
-            {[
-              ["hoy", "Hoy"],
-              ["semana", "Esta semana"],
-              ["mes", "Este mes"],
-              ["ano", "Este ano"],
-              ["personalizado", "Personalizado"],
-            ].map(([k, label]) => (
-              <button
-                key={k}
-                onClick={() => setKind(k)}
-                className={`text-sm rounded-lg px-4 py-2 border transition-colors ${
-                  kind === k
-                    ? "bg-indigo-600 text-white border-indigo-600"
-                    : "border-gray-200 text-gray-600 hover:border-indigo-400 hover:text-indigo-700 hover:bg-indigo-50"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-3 items-end flex-wrap">
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Desde</label>
+        <Barra>
+          <ToolbarButton icon={RefreshCw} label="actualizar" tone="brand" onClick={generate} />
+          <ToolbarButton
+            icon={SlidersHorizontal}
+            label={armar ? "ocultar opciones" : "armar el mio"}
+            active={armar}
+            onClick={() => setArmar((v) => !v)}
+          />
+          <ToolbarSeparator />
+          <ToolbarButton icon={FileSpreadsheet} label="excel" onClick={exportar} disabled={!report} />
+          <ToolbarButton icon={Printer} label="imprimir o pdf" onClick={() => window.print()} disabled={!report} />
+        </Barra>
+
+        <div className="bg-white border border-gray-200 rounded-xl shadow-card p-4 mb-4">
+          <div className="flex flex-wrap items-end gap-3 mb-4">
+            <Campo label="Periodo">
+              <Segmento
+                valor={kind}
+                onChange={setKind}
+                opciones={[
+                  { k: "hoy", l: "Hoy" },
+                  { k: "semana", l: "Esta semana" },
+                  { k: "mes", l: "Este mes" },
+                  { k: "ano", l: "Este año" },
+                  { k: "personalizado", l: "Personalizado" },
+                ]}
+              />
+            </Campo>
+            <Campo label="Desde">
               <input
                 type="date"
                 value={from}
@@ -187,11 +238,10 @@ export default function InformesPage() {
                   setKind("personalizado");
                   setFrom(e.target.value);
                 }}
-                className="border border-gray-200 rounded-lg px-3 py-2 text-sm hover:border-gray-400 focus:border-indigo-500 focus:outline-none transition-colors"
+                className="h-9 px-2.5 border border-gray-300 rounded-lg text-sm bg-white"
               />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Hasta</label>
+            </Campo>
+            <Campo label="Hasta">
               <input
                 type="date"
                 value={to}
@@ -199,84 +249,72 @@ export default function InformesPage() {
                   setKind("personalizado");
                   setTo(e.target.value);
                 }}
-                className="border border-gray-200 rounded-lg px-3 py-2 text-sm hover:border-gray-400 focus:border-indigo-500 focus:outline-none transition-colors"
+                className="h-9 px-2.5 border border-gray-300 rounded-lg text-sm bg-white"
               />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
-          <p className="text-xs text-gray-400 mb-3">Informes sugeridos</p>
-          <div className="grid grid-cols-5 gap-2 mb-5">
-            {PRESETS.map((p) => (
-              <button
-                key={p.label}
-                onClick={() => setSections(p.sections)}
-                className="text-left border border-gray-200 rounded-lg px-3 py-2.5 hover:border-indigo-400 hover:bg-indigo-50 transition-colors group"
-              >
-                <span className="text-sm block group-hover:text-indigo-800">{p.label}</span>
-                <span className="text-[11px] text-gray-400 group-hover:text-indigo-600">
-                  {p.hint}
-                </span>
-              </button>
-            ))}
+            </Campo>
           </div>
 
-          <p className="text-xs text-gray-400 mb-3">O arma el tuyo</p>
-          <div className="grid grid-cols-3 gap-2">
-            {SECTIONS.map((s) => (
-              <button
-                key={s.key}
-                onClick={() => toggleSection(s.key)}
-                className={`text-left rounded-lg px-3 py-2.5 border transition-colors ${
-                  active(s.key)
-                    ? "border-indigo-600 bg-indigo-50"
-                    : "border-gray-200 hover:border-gray-400 hover:bg-gray-50"
-                }`}
-              >
-                <span
-                  className={`text-sm block ${active(s.key) ? "text-indigo-900" : "text-gray-700"}`}
+          <p className="text-[11px] text-gray-500 mb-2">Informes listos</p>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            {PRESETS.map((p) => {
+              const on = presetActivo === p.label;
+              return (
+                <button
+                  key={p.label}
+                  onClick={() => setSections(p.sections)}
+                  className={`text-left rounded-lg px-3 py-2.5 border ${
+                    on ? "border-brand-300 bg-brand-50" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
                 >
-                  {active(s.key) ? "✓ " : ""}
-                  {s.label}
-                </span>
-                <span
-                  className={`text-[11px] ${active(s.key) ? "text-indigo-600" : "text-gray-400"}`}
-                >
-                  {s.hint}
-                </span>
-              </button>
-            ))}
+                  <span className={`text-[13px] block ${on ? "text-brand-800 font-medium" : "text-gray-800"}`}>{p.label}</span>
+                  <span className="text-[11px] text-gray-400">{p.hint}</span>
+                </button>
+              );
+            })}
           </div>
-        </div>
 
-        <div className="flex gap-2 mb-8">
-          <button
-            onClick={generate}
-            disabled={loading || sections.length === 0}
-            className="bg-indigo-600 text-white text-sm px-5 py-2.5 rounded-lg hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-40"
-          >
-            {loading ? "Generando..." : "Generar informe"}
-          </button>
-          {report && (
-            <button
-              onClick={() => window.print()}
-              className="text-sm border border-gray-300 rounded-lg px-5 py-2.5 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
-            >
-              Imprimir o guardar PDF
-            </button>
+          {armar && (
+            <>
+              <p className="text-[11px] text-gray-500 mt-4 mb-2">Marca las partes que quieres ver</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {SECTIONS.map((s) => (
+                  <button
+                    key={s.key}
+                    onClick={() => toggleSection(s.key)}
+                    className={`text-left rounded-lg px-3 py-2 border flex items-start gap-2 ${
+                      active(s.key) ? "border-brand-300 bg-brand-50" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <span
+                      className={`mt-0.5 w-4 h-4 rounded flex items-center justify-center shrink-0 ${
+                        active(s.key) ? "bg-brand-700 text-white" : "border border-gray-300"
+                      }`}
+                    >
+                      {active(s.key) && <Check size={11} strokeWidth={3} />}
+                    </span>
+                    <span>
+                      <span className={`text-[13px] block ${active(s.key) ? "text-brand-900" : "text-gray-700"}`}>{s.label}</span>
+                      <span className="text-[11px] text-gray-400">{s.hint}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </div>
 
-        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+        {error && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
+        )}
+        {loading && !report && <SkeletonRows rows={6} />}
       </div>
 
       {/* ---------- informe ---------- */}
       {report && t && (
-        <div>
+        <div className={`bg-white border border-gray-200 rounded-xl shadow-card p-6 print:border-0 print:shadow-none print:p-0 ${loading ? "opacity-60" : ""}`}>
           <div className="border-b border-gray-200 pb-4 mb-6">
             <p className="text-xs text-gray-400 mb-1">Sistema Save Notas</p>
-            <h2 className="text-xl font-medium">Informe de ventas</h2>
+            <h2 className="text-xl font-semibold text-gray-900">Informe de ventas</h2>
             <p className="text-sm text-gray-500">
               {from === to
                 ? prettyDate(from)
@@ -286,7 +324,7 @@ export default function InformesPage() {
 
           <div className="grid grid-cols-4 gap-3 mb-8">
             {[
-              ["Vendido", money(t.sales), `${t.notes} notas`, "text-indigo-700", "bg-indigo-50"],
+              ["Vendido", money(t.sales), `${t.notes} notas`, "text-brand-700", "bg-brand-50"],
               [
                 "Ganancia",
                 money(t.profit),
@@ -299,7 +337,7 @@ export default function InformesPage() {
             ].map(([label, value, hint, color, bg]) => (
               <div key={label as string} className={`${bg} rounded-xl p-4`}>
                 <p className="text-xs text-gray-500 mb-1">{label}</p>
-                <p className={`text-xl font-medium tracking-tight ${color}`}>{value}</p>
+                <p className={`text-xl font-semibold tracking-tight ${color}`}>{value}</p>
                 <p className="text-[11px] text-gray-500 mt-1">{hint}</p>
               </div>
             ))}
@@ -315,7 +353,7 @@ export default function InformesPage() {
                       <div
                         title={`${prettyDate(d.date)} · ${money(d.total)}`}
                         style={{ height: `${Math.max(pct, 3)}%` }}
-                        className="w-full bg-indigo-400 group-hover:bg-indigo-600 rounded-t transition-colors"
+                        className="w-full bg-brand-300 group-hover:bg-brand-600 rounded-t transition-colors"
                       />
                     </div>
                   );
@@ -451,10 +489,8 @@ export default function InformesPage() {
         </div>
       )}
 
-      {!report && !loading && (
-        <p className="text-sm text-gray-400 print:hidden">
-          Todavia no has generado ningun informe.
-        </p>
+      {!report && !loading && !error && (
+        <p className="text-sm text-gray-400 print:hidden">Preparando el informe...</p>
       )}
     </main>
   );
@@ -497,7 +533,7 @@ function Table({
       </thead>
       <tbody>
         {rows.map((r, i) => (
-          <tr key={i} className="border-t border-gray-100 hover:bg-indigo-50/40 transition-colors">
+          <tr key={i} className="border-t border-gray-100 hover:bg-brand-50/40 transition-colors">
             {r.map((cell, j) => (
               <td
                 key={j}
