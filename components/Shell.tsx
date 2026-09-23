@@ -74,6 +74,40 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
   }, []);
 
+  // Chrome ofrece direcciones guardadas (codigo postal, ciudad...) en cualquier
+  // campo que "parezca" de direccion. Aqui se le dice que no, a todos los campos
+  // del sistema, incluso los que aparecen despues (ventanas, sugerencias...).
+  // No afecta la pantalla de inicio de sesion, que vive fuera de este menu.
+  useEffect(() => {
+    const NO_TOCAR = new Set(["email", "password", "checkbox", "radio", "hidden", "file"]);
+    function procesar(el: Element) {
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return;
+      if (el instanceof HTMLInputElement && NO_TOCAR.has(el.type)) return;
+      if (el.getAttribute("autocomplete") === "sistema-off") return;
+      // un valor que Chrome no reconoce hace que no ofrezca autorrelleno;
+      // "off" solo, Chrome lo ignora en campos que parecen de direccion
+      el.setAttribute("autocomplete", "sistema-off");
+      el.setAttribute("data-lpignore", "true");
+      el.setAttribute("data-1p-ignore", "true");
+      el.setAttribute("data-form-type", "other");
+    }
+    function recorrer(raiz: Element | Document) {
+      raiz.querySelectorAll("input, textarea").forEach(procesar);
+    }
+    recorrer(document);
+    const obs = new MutationObserver((cambios) => {
+      for (const c of cambios) {
+        c.addedNodes.forEach((n) => {
+          if (!(n instanceof Element)) return;
+          procesar(n);
+          recorrer(n);
+        });
+      }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+    return () => obs.disconnect();
+  }, []);
+
   function toggle() {
     setCollapsed((c) => {
       const next = !c;
