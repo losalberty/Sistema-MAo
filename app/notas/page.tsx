@@ -192,6 +192,8 @@ const TONO_MONEDA: Record<string, PillTone> = {
   BS_BCV: "sky",
 };
 
+const POR_PAGINA = 200;
+
 export default function NotasPage() {
   const router = useRouter();
   const [notes, setNotes] = useState<NoteRow[]>([]);
@@ -218,9 +220,37 @@ export default function NotasPage() {
   const [hover, setHover] = useState<{ id: string; rect: DOMRect } | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // años que tienen notas (consulta liviana: solo cuenta)
+  const [anios, setAnios] = useState<string[]>([]);
+  // cuantas filas se dibujan a la vez (el resto con "mostrar mas")
+  const [visibles, setVisibles] = useState(POR_PAGINA);
+
+  // 1) al abrir: averiguar los años y quedarse en el actual
+  useEffect(() => {
+    (async () => {
+      const actual = String(new Date().getFullYear());
+      const { data, error } = await supabase.rpc("notes_years");
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+        return;
+      }
+      const lista = ((data ?? []) as { anio: number }[]).map((r) => String(r.anio));
+      if (!lista.includes(actual)) lista.unshift(actual);
+      lista.sort().reverse();
+      setAnios(lista);
+      setYear(actual);
+    })();
+  }, []);
+
+  // 2) solo se descarga el año que estas mirando, no toda la historia
   const load = useCallback(async () => {
+    if (!year) return;
     setLoading(true);
-    const { data, error } = await supabase.rpc("list_notes");
+    const { data, error } = await supabase.rpc("list_notes_rango", {
+      p_desde: `${year}-01-01`,
+      p_hasta: `${year}-12-31`,
+    });
     setLoading(false);
     if (error) {
       setError(error.message);
@@ -228,15 +258,11 @@ export default function NotasPage() {
     }
     setError(null);
     setNotes((data ?? []) as NoteRow[]);
-  }, []);
+  }, [year]);
 
   useEffect(() => {
     load();
   }, [load]);
-
-  useEffect(() => {
-    if (!year && notes.length > 0) setYear(notes[0].note_date.slice(0, 4));
-  }, [notes, year]);
 
   useEffect(() => {
     function up() {
@@ -260,11 +286,7 @@ export default function NotasPage() {
     };
   }, []);
 
-  const years = useMemo(() => {
-    const s = new Set<string>();
-    for (const n of notes) s.add(n.note_date.slice(0, 4));
-    return Array.from(s).sort().reverse();
-  }, [notes]);
+  const years = anios;
 
   async function handleDelete(id: string) {
     const n = notes.find((x) => x.id === id);
@@ -333,6 +355,11 @@ export default function NotasPage() {
     }
     return list;
   }, [delAnio, month, quarter, estados, search]);
+
+  // al cambiar el filtro se vuelve a mostrar solo la primera tanda
+  useEffect(() => {
+    setVisibles(POR_PAGINA);
+  }, [year, month, quarter, estados, search]);
 
   const totals = useMemo(() => {
     const vivo = (n: NoteRow) => n.effective_status !== "ANULADO";
@@ -601,7 +628,7 @@ export default function NotasPage() {
 
           <div className="select-none" onMouseLeave={salirFila}>
             {!loading &&
-              filtered.map((n, idx) => {
+              filtered.slice(0, visibles).map((n, idx) => {
                 const pct = n.total > 0 ? Math.min((n.paid_usd / n.total) * 100, 100) : 0;
                 const anulada = n.effective_status === "ANULADO";
                 const d = new Date(n.note_date + "T00:00:00");
@@ -712,6 +739,18 @@ export default function NotasPage() {
                 );
               })}
           </div>
+
+          {!loading && filtered.length > visibles && (
+            <div className="flex justify-center py-2.5 border-t border-gray-100">
+              <button
+                onClick={() => setVisibles((v) => v + POR_PAGINA)}
+                className="h-8 px-4 rounded-lg border border-gray-200 bg-white text-xs text-gray-600 hover:border-brand-300 hover:text-brand-700 shadow-sm"
+              >
+                Mostrar {Math.min(POR_PAGINA, filtered.length - visibles)} más
+                <span className="text-gray-400"> · faltan {filtered.length - visibles}</span>
+              </button>
+            </div>
+          )}
 
           {/* ---------- pie ---------- */}
           <div className="flex items-center gap-3 px-3 py-2 border-t border-gray-200 bg-gray-50 text-[11.5px]">
