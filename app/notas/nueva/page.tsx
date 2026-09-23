@@ -1046,16 +1046,45 @@ function NuevaNotaInner() {
       {/* Moneda */}
       <div className="mb-6 border border-gray-200 rounded-lg p-4">
         <label className="text-xs text-gray-500 block mb-2">Moneda de la nota</label>
-        <select
-          className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm mb-2"
-          value={currencyMode}
-          onChange={(e) => setCurrencyMode(e.target.value as CurrencyMode)}
+        <div
+          role="radiogroup"
+          aria-label="Moneda de la nota"
+          className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-gray-100 mb-3"
         >
-          <option value="USD">Dolares (USD)</option>
-          <option value="COP">Pesos colombianos (COP)</option>
-          <option value="BS_BINANCE">Bolivares - tasa Binance</option>
-          <option value="BS_BCV">Bolivares - tasa BCV (con ajuste de brecha)</option>
-        </select>
+          {(
+            [
+              { k: "USD", t: "Dolares", s: "USD" },
+              { k: "COP", t: "Pesos", s: "colombianos" },
+              { k: "BS_BINANCE", t: "Bs Binance", s: "tasa Binance" },
+              { k: "BS_BCV", t: "Bs BCV", s: "tasa BCV + brecha" },
+            ] as { k: CurrencyMode; t: string; s: string }[]
+          ).map((m) => {
+            const on = currencyMode === m.k;
+            return (
+              <button
+                key={m.k}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => setCurrencyMode(m.k)}
+                className={`rounded-lg px-2 py-1.5 text-center transition-colors ${
+                  on
+                    ? "bg-white shadow-card ring-1 ring-brand-200 text-brand-800"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
+                }`}
+              >
+                <span className="block text-[13px] font-medium leading-tight">{m.t}</span>
+                <span
+                  className={`block text-[10.5px] leading-tight ${
+                    on ? "text-brand-500" : "text-gray-400"
+                  }`}
+                >
+                  {m.s}
+                </span>
+              </button>
+            );
+          })}
+        </div>
         {isForeign && (
           <div className="flex gap-2">
             <div className="flex-1">
