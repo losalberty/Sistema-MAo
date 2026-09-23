@@ -1,1515 +1,1258 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Check, CircleDot, Eye, FilePlus2, Save } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import ClientePicker, { type ClienteHit } from "@/components/ClientePicker";
+import ProductPicker, { PickerProduct } from "@/components/ProductPicker";
+import { NumInput, notify } from "@/components/ui";
 
-type NoteRow = {
+type ClientRow = {
   id: string;
-  sequence_number: number;
-  client_id: string | null;
-  display_name: string;
-  note_date: string;
-  currency_mode: string;
-  exchange_rate: number | null;
-  exchange_gap_percent: number | null;
-  subtotal: number;
-  discount: number;
-  total: number;
-  total_cost: number;
-  payment_status: string;
-  due_date: string | null;
-  paid_usd: number;
-  pending_usd: number;
-  payments_count: number;
-  effective_status: string;
-  days_overdue: number;
-  returned_usd: number;
-  credit_usd: number;
-  created_at: string;
+  client_number?: number;
+  name: string;
+  tax_id: string | null;
+  fiscal_address: string | null;
+  phone: string | null;
+  city: string | null;
+  state: string | null;
+  salesperson: string | null;
+  price_tier?: number;
+  balance_due?: number;
 };
 
-type Payment = {
-  id: string;
-  payment_date: string;
-  currency_mode: string;
-  amount_currency: number;
-  exchange_rate: number | null;
-  amount_usd: number;
-  method: string | null;
-  reference: string | null;
-  voided: boolean;
-};
-
-type Collection = {
-  total: number;
-  returned: number;
-  neto: number;
-  credit: number;
-  paid: number;
-  pending: number;
-  currency_mode: string;
-  exchange_rate: number | null;
-  display_name: string;
-  sequence_number: number;
-  payments: Payment[];
-};
-
-type Linea = {
-  note_id: string;
-  sequence_number: number;
-  note_date: string;
-  currency_mode: string;
-  display_name: string;
-  code: string;
-  description: string;
+type LineItem = {
+  product_id: string | null;
+  code_snapshot: string;
+  description_snapshot: string;
   quantity: number;
   unit_price: number;
+  line_discount: number;
   line_total: number;
+  cost_snapshot: number;
+  price_tier_used: number | null;
+  prices?: (number | null)[];
 };
 
-type Busqueda = {
-  unidades: number;
-  notas: number;
-  lineas_count: number;
-  total_usd: number;
-  primera_fecha: string | null;
-  ultima_fecha: string | null;
-  ultimo_precio: number | null;
-  por_mes: { mes: string; unidades: number; total: number }[];
-  lineas: Linea[];
+type CurrencyMode = "USD" | "COP" | "BS_BINANCE" | "BS_BCV";
+
+const emptyClientForm = {
+  name: "",
+  tax_id: "",
+  fiscal_address: "",
+  phone: "",
+  city: "",
+  state: "",
+  salesperson: "",
+  price_tier: "1",
 };
 
-const MESES_CORTOS = [
-  "ene", "feb", "mar", "abr", "may", "jun",
-  "jul", "ago", "sep", "oct", "nov", "dic",
-];
+function NuevaNotaInner() {
+  const params = useSearchParams();
+  const editId = params.get("id");
 
-const MESES_LARGOS = [
-  "enero", "febrero", "marzo", "abril", "mayo", "junio",
-  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
-];
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<PickerProduct[]>([]);
+  const [showPicker, setShowPicker] = useState(false);
+  const [items, setItems] = useState<LineItem[]>([]);
 
-const DIAS_LARGOS = [
-  "domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado",
-];
+  const [clientQuery, setClientQuery] = useState("");
+  const [clientResults, setClientResults] = useState<ClientRow[]>([]);
+  const [selectedClient, setSelectedClient] = useState<ClientRow | null>(null);
+  const [quickClientName, setQuickClientName] = useState("");
+  const [showClientForm, setShowClientForm] = useState(false);
+  const [clientForm, setClientForm] = useState(emptyClientForm);
+  const [savingClient, setSavingClient] = useState(false);
 
-const DIAS_CORTOS = ["dom", "lun", "mar", "mie", "jue", "vie", "sab"];
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [currencyMode, setCurrencyMode] = useState<CurrencyMode>("USD");
+  const [exchangeRate, setExchangeRate] = useState(0);
+  const [gapPercent, setGapPercent] = useState(0);
 
-type Moneda = {
-  key: string;
-  label: string;
-  largo: string;
-  pill: string;
-  corto: string;
-};
+  const [paymentStatus, setPaymentStatus] = useState("PENDIENTE");
+  const [dueDate, setDueDate] = useState("");
+  const [showProfit, setShowProfit] = useState(false);
+  const [newCode, setNewCode] = useState("");
+  const [codeError, setCodeError] = useState<string | null>(null);
 
-const MONEDAS: Moneda[] = [
-  { key: "USD", label: "dolares", largo: "dolares", pill: "bg-emerald-50 text-emerald-800", corto: "USD" },
-  { key: "COP", label: "pesos", largo: "pesos colombianos", pill: "bg-violet-50 text-violet-800", corto: "COP" },
-  { key: "BS_BINANCE", label: "Bs Binance", largo: "bolivares tasa Binance", pill: "bg-amber-50 text-amber-800", corto: "Bs" },
-  { key: "BS_BCV", label: "Bs BCV", largo: "bolivares tasa BCV", pill: "bg-blue-50 text-blue-800", corto: "Bs" },
-];
-
-const ESTADOS = [
-  { key: "PENDIENTE", label: "pendientes" },
-  { key: "ABONADA", label: "abonadas" },
-  { key: "COBRADO", label: "cobradas" },
-  { key: "ANULADO", label: "anuladas" },
-];
-
-function moneda(mode: string): Moneda {
-  return MONEDAS.find((m) => m.key === mode) ?? MONEDAS[0];
-}
-
-function money(n: number) {
-  return (n ?? 0).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function miles(n: number) {
-  return Math.round(n ?? 0).toLocaleString("en-US");
-}
-
-function effectiveRate(mode: string, rate: number | null, gap: number | null) {
-  if (mode === "BS_BCV") return (rate ?? 0) * (1 + (gap ?? 0) / 100);
-  return rate ?? 0;
-}
-
-function fechaLarga(iso: string) {
-  const d = new Date(iso + "T00:00:00");
-  return `${DIAS_LARGOS[d.getDay()]} ${d.getDate()} de ${MESES_LARGOS[d.getMonth()]}`;
-}
-
-export default function NotasPage() {
-  const [notes, setNotes] = useState<NoteRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedNoteNumber, setSavedNoteNumber] = useState<number | null>(null);
+  const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadingEdit, setLoadingEdit] = useState(!!editId);
 
-  const [search, setSearch] = useState("");
-  const [year, setYear] = useState<string>("");
-  const [month, setMonth] = useState<number | null>(null);
-  const [quarter, setQuarter] = useState<number | null>(null);
-  const [estados, setEstados] = useState<string[]>(["PENDIENTE", "ABONADA", "COBRADO"]);
-  const [verGanancia, setVerGanancia] = useState(false);
-  const [showCols, setShowCols] = useState(false);
+  // Guardado: la foto de lo ultimo que se guardo, para saber si hay cambios pendientes
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [baselinePending, setBaselinePending] = useState(false);
+  const savedIdRef = useRef<string | null>(null);
 
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const dragging = useRef(false);
-  const dragAdds = useRef(true);
+  // la nota con la que se trabaja: la que se abrio para editar, o la que se acaba de crear
+  const currentId = editId ?? savedNoteId;
 
-  const [abonarId, setAbonarId] = useState<string | null>(null);
-  const [devolverId, setDevolverId] = useState<string | null>(null);
-  const [showBuscar, setShowBuscar] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data, error } = await supabase.rpc("list_notes");
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setNotes((data ?? []) as NoteRow[]);
-  }, []);
+  const tier = selectedClient?.price_tier ?? 1;
 
   useEffect(() => {
-    load();
-  }, [load]);
+    // si la URL apunta a la nota que acabamos de guardar, no recargarla
+    if (editId && editId !== savedIdRef.current) loadForEdit(editId);
+  }, [editId]);
 
-  useEffect(() => {
-    if (!year && notes.length > 0) setYear(notes[0].note_date.slice(0, 4));
-  }, [notes, year]);
-
-  useEffect(() => {
-    function up() {
-      dragging.current = false;
-    }
-    window.addEventListener("mouseup", up);
-    return () => window.removeEventListener("mouseup", up);
-  }, []);
-
-  const years = useMemo(() => {
-    const s = new Set<string>();
-    for (const n of notes) s.add(n.note_date.slice(0, 4));
-    return Array.from(s).sort().reverse();
-  }, [notes]);
-
-  async function handleDelete(id: string) {
-    if (!confirm("¿Eliminar esta nota? Esta accion no se puede deshacer.")) return;
-    const { error } = await supabase.rpc("delete_note", { p_note_id: id });
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setNotes((prev) => prev.filter((n) => n.id !== id));
-  }
-
-  function toggleEstado(k: string) {
-    setEstados((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
-  }
-
-  function setSel(id: string, on: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (on) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }
-
-  // notas del año (base para el total anual)
-  const delAnio = useMemo(
-    () => notes.filter((n) => !year || n.note_date.slice(0, 4) === year),
-    [notes, year]
-  );
-
-  const filtered = useMemo(() => {
-    let list = delAnio;
-    if (month !== null) {
-      list = list.filter((n) => Number(n.note_date.slice(5, 7)) - 1 === month);
-    } else if (quarter !== null) {
-      list = list.filter((n) => {
-        const m = Number(n.note_date.slice(5, 7)) - 1;
-        return Math.floor(m / 3) === quarter;
-      });
-    }
-    if (estados.length > 0 && estados.length < ESTADOS.length) {
-      list = list.filter((n) => estados.includes(n.effective_status));
-    }
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      list = list.filter(
-        (n) =>
-          n.display_name.toLowerCase().includes(q) ||
-          String(n.sequence_number).includes(q)
-      );
-    }
-    return list;
-  }, [delAnio, month, quarter, estados, search]);
-
-  const totals = useMemo(() => {
-    const vivo = (n: NoteRow) => n.effective_status !== "ANULADO";
-    const anio = delAnio.filter(vivo).reduce((s, n) => s + n.total, 0);
-    const mes = filtered.filter(vivo).reduce((s, n) => s + n.total, 0);
-    const porCobrar = delAnio.filter(vivo).reduce((s, n) => s + n.pending_usd, 0);
-    let sel = 0;
-    let selCount = 0;
-    for (const n of filtered) {
-      if (selected.has(n.id)) {
-        sel += n.total;
-        selCount++;
+  async function loadForEdit(id: string) {
+    setLoadingEdit(true);
+    const { data, error } = await supabase.rpc("get_note_detail", { p_note_id: id });
+    setLoadingEdit(false);
+    if (error) return setError(error.message);
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return;
+    const loaded: LineItem[] = (row.items ?? []).map((i: LineItem) => ({
+      ...i,
+      cost_snapshot: i.cost_snapshot ?? 0,
+    }));
+    // recuperar las tarifas de cada producto para poder cambiar entre
+    // contado y credito tambien al editar una nota ya guardada
+    const ids = loaded.map((i) => i.product_id).filter(Boolean) as string[];
+    if (ids.length > 0) {
+      const { data: pr } = await supabase.rpc("products_prices", { p_ids: ids });
+      const map = new Map<string, PickerProduct>();
+      for (const p of (pr ?? []) as PickerProduct[]) map.set(p.id, p);
+      for (const it of loaded) {
+        const p = it.product_id ? map.get(it.product_id) : null;
+        if (p) it.prices = [p.price_1, p.price_2, p.price_3, p.price_4];
       }
     }
-    return { anio, mes, porCobrar, sel, selCount };
-  }, [delAnio, filtered, selected]);
+    setItems(loaded);
+    setQuickClientName(row.quick_client_name ?? "");
+    if (row.client_id) {
+      const { data: cs } = await supabase.rpc("list_clients", { search_text: row.display_name });
+      const found = (cs ?? []).find((c: ClientRow) => c.id === row.client_id);
+      setSelectedClient(found ?? null);
+    }
+    setCurrencyMode((row.currency_mode as CurrencyMode) ?? "USD");
+    setExchangeRate(row.exchange_rate ?? 0);
+    setGapPercent(row.exchange_gap_percent ?? 0);
+    setPaymentStatus(row.payment_status ?? "PENDIENTE");
+    setDueDate(row.due_date ?? "");
+    const sub = row.subtotal ?? 0;
+    setDiscountPercent(sub > 0 ? Math.round(((row.discount ?? 0) / sub) * 10000) / 100 : 0);
+    setSavedNoteNumber(row.sequence_number ?? null);
+    // cuando todo lo cargado este en pantalla, tomar esa foto como "lo guardado"
+    setBaselinePending(true);
+  }
 
-  const etiquetaPeriodo =
-    month !== null
-      ? MESES_LARGOS[month]
-      : quarter !== null
-      ? `trimestre ${quarter + 1}`
-      : "todo el año";
+  function resetForm() {
+    setItems([]);
+    setQuery("");
+    setResults([]);
+    setSelectedClient(null);
+    setQuickClientName("");
+    setClientQuery("");
+    setClientResults([]);
+    setDiscountPercent(0);
+    setCurrencyMode("USD");
+    setExchangeRate(0);
+    setGapPercent(0);
+    setPaymentStatus("PENDIENTE");
+    setDueDate("");
+    setSavedNoteNumber(null);
+    setSavedNoteId(null);
+    savedIdRef.current = null;
+    setLastSaved(null);
+    setError(null);
+    window.history.replaceState({}, "", "/notas/nueva");
+  }
 
-  const abonarNote = notes.find((n) => n.id === abonarId) ?? null;
+  const subtotal = items.reduce((s, i) => s + i.line_total, 0);
+  const discountAmount = (subtotal * discountPercent) / 100;
+  const total = subtotal - discountAmount;
+  const totalCost = items.reduce((s, i) => s + (i.cost_snapshot || 0) * i.quantity, 0);
+  const profit = total - totalCost;
+  const margin = total > 0 ? (profit / total) * 100 : 0;
+
+  const effectiveRate =
+    currencyMode === "BS_BCV" ? exchangeRate * (1 + gapPercent / 100) : exchangeRate;
+  const isForeign = currencyMode !== "USD";
+  const curLabel = currencyMode === "COP" ? "COP" : "Bs";
+  const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+  function priceOf(p: PickerProduct, t: number) {
+    const v = t === 4 ? p.price_4 : t === 3 ? p.price_3 : t === 2 ? p.price_2 : p.price_1;
+    return Number(v ?? p.price_1 ?? 0);
+  }
+
+  // Cada busqueda lleva un numero. Si llega la respuesta de una busqueda vieja
+  // (porque ya agregaste el producto o seguiste escribiendo), se ignora.
+  // Esto evita que el menu se vuelva a abrir solo despues de agregar.
+  const searchSeq = useRef(0);
+
+  async function searchProducts(text: string) {
+    setQuery(text);
+    const mio = ++searchSeq.current;
+    if (text.length < 2) return setResults([]);
+    const { data, error } = await supabase.rpc("search_products", { search_text: text });
+    if (mio !== searchSeq.current) return;
+    if (error) return setError(error.message);
+    setResults(data ?? []);
+  }
+
+  // ---------- sugerencias del renglon de abajo ----------
+  const [newHits, setNewHits] = useState<PickerProduct[]>([]);
+  const [newActive, setNewActive] = useState(0);
+  const newSeq = useRef(0);
+
+  async function suggestNew(text: string) {
+    setNewCode(text);
+    setCodeError(null);
+    const mio = ++newSeq.current;
+    if (text.trim().length < 2) {
+      setNewHits([]);
+      return;
+    }
+    const { data } = await supabase.rpc("search_products", { search_text: text.trim() });
+    if (mio !== newSeq.current) return;
+    setNewHits(((data ?? []) as PickerProduct[]).slice(0, 7));
+    setNewActive(0);
+  }
+
+  function pickNew(p: PickerProduct) {
+    newSeq.current++;
+    const next = items.length;
+    addProduct(p, tier);
+    setNewCode("");
+    setNewHits([]);
+    focusEl(`cant-${next}`);
+  }
+
+  function focusEl(id: string) {
+    setTimeout(() => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      if (el) {
+        el.focus();
+        el.select?.();
+      }
+    }, 30);
+  }
+
+  function addProduct(p: PickerProduct, tierUsed: number) {
+    const price = priceOf(p, tierUsed);
+    setItems((prev) => [
+      ...prev,
+      {
+        product_id: p.id,
+        code_snapshot: p.code,
+        description_snapshot: p.description,
+        quantity: 1,
+        unit_price: price,
+        line_discount: 0,
+        line_total: price,
+        cost_snapshot: Number(p.cost ?? 0),
+        price_tier_used: tierUsed,
+        prices: [p.price_1, p.price_2, p.price_3, p.price_4],
+      },
+    ]);
+    // invalidar cualquier busqueda que siga en camino
+    searchSeq.current++;
+    setQuery("");
+    setResults([]);
+  }
+
+  // ---------- cuadricula: navegacion y edicion ----------
+  // Columnas: 0 codigo · 1 descripcion · 2 cantidad · 3 precio
+
+  function focusCell(row: number, col: number) {
+    const ids = ["cod", "desc", "cant", "prec"];
+    focusEl(`${ids[col]}-${row}`);
+  }
+
+  // Cambia el producto de una linea ya metida, conservando la cantidad
+  function replaceProduct(i: number, p: PickerProduct) {
+    const price = priceOf(p, tier);
+    setItems((prev) =>
+      prev.map((it, idx) =>
+        idx === i
+          ? recalc({
+              ...it,
+              product_id: p.id,
+              code_snapshot: p.code,
+              description_snapshot: p.description,
+              unit_price: price,
+              cost_snapshot: Number(p.cost ?? 0),
+              price_tier_used: tier,
+              prices: [p.price_1, p.price_2, p.price_3, p.price_4],
+            })
+          : it
+      )
+    );
+  }
+
+  // Enter sobre el codigo de una linea existente: lo resuelve y lo cambia
+  async function resolveLineCode(i: number) {
+    const text = (items[i]?.code_snapshot ?? "").trim();
+    if (!text) return;
+    setCodeError(null);
+    const { data } = await supabase.rpc("search_products", { search_text: text });
+    const hits = (data ?? []) as PickerProduct[];
+    if (hits.length === 0) {
+      // no existe: la linea pasa a ser manual con ese codigo, lista para escribirle
+      setItems((prev) =>
+        prev.map((it, idx) =>
+          idx === i ? { ...it, product_id: null, price_tier_used: null, prices: undefined } : it
+        )
+      );
+      setCodeError(`"${text}" no esta en el catalogo. Escribe la descripcion y el precio, o guardalo abajo.`);
+      focusCell(i, 1);
+      return;
+    }
+    const norm = (s: string) => s.replace(/\s+/g, "").toUpperCase();
+    replaceProduct(i, hits.find((h) => norm(h.code) === norm(text)) ?? hits[0]);
+    focusCell(i, 2);
+  }
+
+  async function onGridKey(e: React.KeyboardEvent<HTMLInputElement>, i: number, col: number) {
+    const last = items.length - 1;
+    if (e.key === "ArrowDown" && i < last) {
+      e.preventDefault();
+      return focusCell(i + 1, col);
+    }
+    if (e.key === "ArrowUp" && i > 0) {
+      e.preventDefault();
+      return focusCell(i - 1, col);
+    }
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (col === 0) return resolveLineCode(i);
+    if (col < 3) return focusCell(i, col + 1);
+    // ultima columna: baja a la linea siguiente, o a la linea vacia del final
+    if (i === last) return focusEl("cod-nuevo");
+    return focusCell(i + 1, 0);
+  }
+
+  // Guarda en el catalogo un producto que se escribio a mano en la nota
+  async function saveManualToCatalog(i: number) {
+    const it = items[i];
+    if (!it.code_snapshot.trim() || !it.description_snapshot.trim()) {
+      setCodeError("Necesita codigo y descripcion para guardarlo en el catalogo.");
+      return;
+    }
+    const { data, error } = await supabase.rpc("upsert_product", {
+      p_id: null,
+      p_code: it.code_snapshot.trim(),
+      p_description: it.description_snapshot.trim(),
+      p_brand: null,
+      p_category: null,
+      p_price_1: it.unit_price,
+      p_price_2: null,
+      p_price_3: null,
+      p_price_4: null,
+      p_has_stock_control: true,
+      p_stock_quantity: 0,
+      p_price_list: "Lista principal",
+      p_cost: it.cost_snapshot || 0,
+      p_purchase_price: null,
+      p_discount_percent: 0,
+    });
+    if (error) return setError(error.message);
+    const p = data as PickerProduct;
+    setItems((prev) =>
+      prev.map((x, idx) =>
+        idx === i
+          ? { ...x, product_id: p.id, price_tier_used: 1, prices: [p.price_1, null, null, null] }
+          : x
+      )
+    );
+    setCodeError(null);
+  }
+
+  // Escribir el codigo en la linea vacia del final y darle Enter
+  async function addByCode(e: React.KeyboardEvent<HTMLInputElement>) {
+    // moverse por las sugerencias con las flechas
+    if (newHits.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      setNewActive((a) =>
+        e.key === "ArrowDown" ? Math.min(a + 1, newHits.length - 1) : Math.max(a - 1, 0)
+      );
+      return;
+    }
+    if (e.key === "Escape") {
+      newSeq.current++;
+      setNewHits([]);
+      return;
+    }
+    if (e.key !== "Enter" && !(e.key === "Tab" && !e.shiftKey && newCode.trim())) return;
+    const text = newCode.trim();
+    if (!text) return;
+    e.preventDefault();
+    setCodeError(null);
+
+    const norm = (s: string) => s.replace(/\s+/g, "").toUpperCase();
+
+    // si hay sugerencias a la vista: codigo exacto primero, si no la marcada
+    if (newHits.length > 0) {
+      const exacto = newHits.find((h) => norm(h.code) === norm(text));
+      pickNew(exacto ?? newHits[newActive] ?? newHits[0]);
+      return;
+    }
+
+    newSeq.current++;
+    const { data } = await supabase.rpc("search_products", { search_text: text });
+    const hits = (data ?? []) as PickerProduct[];
+    if (hits.length === 0) {
+      setCodeError(`No existe "${text}"`);
+      return;
+    }
+    pickNew(hits.find((h) => norm(h.code) === norm(text)) ?? hits[0]);
+  }
+
+  function addManualProduct() {
+    setItems((prev) => [
+      ...prev,
+      {
+        product_id: null,
+        code_snapshot: "",
+        description_snapshot: "",
+        quantity: 1,
+        unit_price: 0,
+        line_discount: 0,
+        line_total: 0,
+        cost_snapshot: 0,
+        price_tier_used: null,
+      },
+    ]);
+  }
+
+  function recalc(it: LineItem) {
+    return { ...it, line_total: it.quantity * it.unit_price - it.line_discount };
+  }
+
+  function updateItem(i: number, field: "quantity" | "unit_price" | "cost_snapshot", v: number) {
+    setItems((prev) =>
+      prev.map((it, idx) => {
+        if (idx !== i) return it;
+        const upd = { ...it, [field]: v };
+        if (field === "unit_price") upd.price_tier_used = null;
+        return recalc(upd);
+      })
+    );
+  }
+
+  function setLineTier(i: number, t: number) {
+    setItems((prev) =>
+      prev.map((it, idx) => {
+        if (idx !== i || !it.prices) return it;
+        const v = it.prices[t - 1];
+        if (v == null) return it;
+        return recalc({ ...it, unit_price: Number(v), price_tier_used: t });
+      })
+    );
+  }
+
+  function updateItemText(i: number, field: "code_snapshot" | "description_snapshot", v: string) {
+    setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, [field]: v } : it)));
+  }
+
+  function removeItem(i: number) {
+    setItems((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function searchClients(text: string) {
+    setClientQuery(text);
+    if (text.length < 2) return setClientResults([]);
+    const { data, error } = await supabase.rpc("list_clients", { search_text: text });
+    if (error) return setError(error.message);
+    setClientResults(data ?? []);
+  }
+
+  function selectClient(c: ClientRow) {
+    setSelectedClient(c);
+    setClientQuery("");
+    setClientResults([]);
+    const t = c.price_tier ?? 1;
+    setItems((prev) =>
+      prev.map((it) => {
+        if (!it.prices) return it;
+        const v = it.prices[t - 1];
+        if (v == null) return it;
+        return recalc({ ...it, unit_price: Number(v), price_tier_used: t });
+      })
+    );
+  }
+
+  async function saveClient() {
+    setSavingClient(true);
+    setError(null);
+    const base = {
+      p_name: clientForm.name,
+      p_tax_id: clientForm.tax_id,
+      p_fiscal_address: clientForm.fiscal_address,
+      p_phone: clientForm.phone,
+      p_city: clientForm.city,
+      p_state: clientForm.state,
+      p_salesperson: clientForm.salesperson,
+      p_price_tier: Number(clientForm.price_tier) || 1,
+    };
+    const { data, error } = selectedClient
+      ? await supabase.rpc("update_client", { p_id: selectedClient.id, ...base })
+      : await supabase.rpc("create_client", base);
+    setSavingClient(false);
+    if (error) return setError(error.message);
+    selectClient(data as ClientRow);
+    setShowClientForm(false);
+  }
+
+  function buildPayload() {
+    return {
+      p_client_id: selectedClient?.id ?? null,
+      p_quick_client_name: selectedClient ? null : quickClientName || "Cliente eventual",
+      p_currency_mode: currencyMode,
+      p_exchange_rate: isForeign ? exchangeRate : null,
+      p_exchange_gap_percent: currencyMode === "BS_BCV" ? gapPercent : null,
+      p_show_company_name: true,
+      p_show_logo: true,
+      p_discount: discountAmount,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      p_items: items.map(({ prices, ...rest }) => rest),
+      p_payment_status: paymentStatus,
+      p_due_date: dueDate || null,
+    };
+  }
+
+  // foto actual de la nota: si es distinta a la ultima guardada, hay cambios sin guardar
+  const snapshot = useMemo(
+    () => JSON.stringify(buildPayload()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedClient, quickClientName, currencyMode, exchangeRate, gapPercent,
+     discountAmount, items, paymentStatus, dueDate]
+  );
+  const dirty = lastSaved === null ? items.length > 0 : snapshot !== lastSaved;
+
+  useEffect(() => {
+    if (baselinePending) {
+      setLastSaved(snapshot);
+      setBaselinePending(false);
+    }
+  }, [baselinePending, snapshot]);
+
+  // avisar si se cierra la pestaña con cambios sin guardar
+  useEffect(() => {
+    if (!dirty) return;
+    const h = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [dirty]);
+
+  const CURRENCY_NAME: Record<CurrencyMode, string> = {
+    USD: "dolares",
+    COP: "pesos",
+    BS_BINANCE: "Binance",
+    BS_BCV: "BCV",
+  };
+
+  async function saveNote() {
+    setError(null);
+    if (items.length === 0) {
+      notify.aviso("La nota no tiene productos");
+      return;
+    }
+    if (isForeign && !(exchangeRate > 0)) {
+      const msg = `Falta la tasa de ${CURRENCY_NAME[currencyMode]}`;
+      setError(`${msg}. Escribela en "Tasa del dia" antes de guardar.`);
+      notify.error(msg, "Escribela en Tasa del dia antes de guardar.");
+      return;
+    }
+
+    setSaving(true);
+    const payload = buildPayload();
+    const snap = JSON.stringify(payload);
+    const eraNueva = !currentId;
+
+    const { data, error } = currentId
+      ? await supabase.rpc("update_note", { p_note_id: currentId, ...payload })
+      : await supabase.rpc("create_note", payload);
+    setSaving(false);
+
+    if (error) {
+      setError(error.message);
+      notify.error("No se pudo guardar", error.message);
+      return;
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    const id = (row?.id as string) ?? currentId ?? null;
+    const numero = row?.sequence_number ?? savedNoteNumber;
+
+    savedIdRef.current = id;
+    setSavedNoteId(id);
+    setSavedNoteNumber(numero ?? null);
+    setLastSaved(snap);
+
+    // dejar la direccion apuntando a esta nota: si recargas, sigues en ella
+    if (eraNueva && id) window.history.replaceState({}, "", `/notas/nueva?id=${id}`);
+
+    const etiqueta = numero ? `Nota #${String(numero).padStart(4, "0")}` : "Nota";
+    notify.ok(eraNueva ? `${etiqueta} guardada` : "Cambios guardados", eraNueva ? undefined : etiqueta);
+  }
+
+  if (loadingEdit) return <p className="text-sm text-gray-400 p-8">Cargando nota...</p>;
 
   return (
-    <main className="p-6 max-w-[1150px]">
-      <div className="flex items-end justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Notas</h1>
-          <p className="text-sm text-gray-500">
-            {filtered.length} notas · {etiquetaPeriodo}
-          </p>
-        </div>
-        <Link
-          href="/notas/nueva"
-          className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-700"
-        >
-          Nueva nota
-        </Link>
-      </div>
-
-      {error && (
-        <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
-          {error}
-        </div>
+    <main className="max-w-3xl mx-auto p-8">
+      {showPicker && (
+        <ProductPicker
+          tier={tier}
+          onPick={(p, t) => {
+            addProduct(p, t);
+            setShowPicker(false);
+          }}
+          onClose={() => setShowPicker(false)}
+        />
       )}
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex">
-        {/* ---------- columna de periodos ---------- */}
-        <aside className="w-[118px] shrink-0 border-r border-gray-100 p-2.5 select-none">
-          <select
-            value={year}
-            onChange={(e) => {
-              setYear(e.target.value);
-              setMonth(null);
-              setQuarter(null);
-              setSelected(new Set());
-            }}
-            className="w-full h-7 px-1.5 border border-gray-200 rounded-lg text-xs mb-2.5"
-          >
-            {years.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+      <Link href="/notas" className="text-sm text-gray-500 hover:text-gray-900 inline-block mb-4">
+        ← Volver a notas
+      </Link>
+      <h1 className="text-lg font-medium mb-6">{editId ? "Editar nota" : "Nueva nota"}</h1>
 
-          <div className="flex gap-1.5">
-            <div className="flex-1">
-              {MESES_CORTOS.map((m, i) => (
-                <button
-                  key={m}
-                  onClick={() => {
-                    setQuarter(null);
-                    setMonth(month === i ? null : i);
-                    setSelected(new Set());
-                  }}
-                  className={`block w-full text-left text-[11.5px] px-1.5 py-[3px] rounded ${
-                    month === i
-                      ? "bg-gray-900 text-white"
-                      : "text-gray-600 hover:bg-gray-100"
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
+      {/* Cliente */}
+      <div className="mb-6 border border-gray-200 rounded-lg p-4">
+        <label className="text-xs text-gray-500 block mb-2">Cliente</label>
+        {selectedClient ? (
+          <div className="flex items-start justify-between bg-gray-50 rounded-md px-3 py-2 text-sm">
+            <div>
+              <p className="font-medium">
+                {selectedClient.name}
+                <span className="ml-2 text-xs bg-gray-900 text-white rounded px-1.5 py-0.5">
+                  Tarifa {tier}
+                </span>
+              </p>
+              <p className="text-xs text-gray-500">
+                {[selectedClient.tax_id, selectedClient.city, selectedClient.state]
+                  .filter(Boolean)
+                  .join(" - ")}
+              </p>
+              {!!Number(selectedClient.balance_due) && (
+                <p className="text-xs text-amber-700 mt-1">
+                  Pendiente de cobro: ${Number(selectedClient.balance_due).toFixed(2)}
+                </p>
+              )}
             </div>
-            <div className="w-6 border-l border-gray-100 pl-1">
-              {[0, 1, 2, 3].map((q) => (
-                <button
-                  key={q}
-                  onClick={() => {
-                    setMonth(null);
-                    setQuarter(quarter === q ? null : q);
-                    setSelected(new Set());
-                  }}
-                  className={`block w-full text-center text-[10.5px] py-[2px] rounded ${
-                    quarter === q
-                      ? "bg-gray-900 text-white"
-                      : "text-gray-400 hover:bg-gray-100"
-                  }`}
-                  style={{ marginTop: q === 0 ? 11 : 31 }}
-                >
-                  {q + 1}T
-                </button>
-              ))}
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setClientForm({
+                    name: selectedClient.name ?? "",
+                    tax_id: selectedClient.tax_id ?? "",
+                    fiscal_address: selectedClient.fiscal_address ?? "",
+                    phone: selectedClient.phone ?? "",
+                    city: selectedClient.city ?? "",
+                    state: selectedClient.state ?? "",
+                    salesperson: selectedClient.salesperson ?? "",
+                    price_tier: String(selectedClient.price_tier ?? 1),
+                  });
+                  setShowClientForm(true);
+                }}
+                className="text-xs text-gray-500 hover:text-gray-900"
+              >
+                Editar
+              </button>
+              <button
+                onClick={() => setSelectedClient(null)}
+                className="text-xs text-gray-400 hover:text-red-500"
+              >
+                Quitar
+              </button>
             </div>
           </div>
-
-          <div className="h-px bg-gray-100 my-2.5" />
-
-          {ESTADOS.map((e) => (
-            <label
-              key={e.key}
-              className="flex items-center gap-1.5 text-[11.5px] mb-1 cursor-pointer text-gray-600"
-            >
+        ) : (
+          <>
+            <div className="relative mb-2">
               <input
-                type="checkbox"
-                checked={estados.includes(e.key)}
-                onChange={() => toggleEstado(e.key)}
-                className="w-3 h-3"
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+                placeholder="Buscar por nombre, cedula, ciudad o estado"
+                value={clientQuery}
+                onChange={(e) => searchClients(e.target.value)}
               />
-              {e.label}
-            </label>
-          ))}
-
-          {(month !== null || quarter !== null) && (
-            <button
-              onClick={() => {
-                setMonth(null);
-                setQuarter(null);
-              }}
-              className="mt-2.5 text-[10.5px] text-gray-400 hover:text-gray-700 underline"
-            >
-              ver todo el año
-            </button>
-          )}
-        </aside>
-
-        {/* ---------- tabla ---------- */}
-        <section className="flex-1 min-w-0">
-          <div className="flex gap-2 p-2.5 border-b border-gray-100">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cliente o numero de nota"
-              className="flex-1 h-7 px-2.5 border border-gray-200 rounded-lg text-[12.5px]"
-            />
-            <button
-              onClick={() => setShowBuscar(true)}
-              className="h-7 px-2.5 rounded-lg border border-gray-200 text-[11.5px] text-gray-700 hover:bg-gray-50"
-            >
-              busqueda profunda
-            </button>
-            <div className="relative">
-              <button
-                onClick={() => setShowCols((v) => !v)}
-                className="h-7 px-2.5 rounded-lg border border-gray-200 text-[11.5px] text-gray-700 hover:bg-gray-50"
-              >
-                columnas
-              </button>
-              {showCols && (
-                <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-2.5 w-44">
-                  <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={verGanancia}
-                      onChange={(e) => setVerGanancia(e.target.checked)}
-                      className="w-3 h-3"
-                    />
-                    mostrar ganancia
-                  </label>
-                  <p className="text-[10px] text-gray-400 mt-1.5">
-                    Se guarda apagada. La rentabilidad tambien esta dentro de cada nota.
-                  </p>
+              {clientResults.length > 0 && (
+                <div className="border border-gray-200 rounded-md mt-1 bg-white shadow-sm max-h-60 overflow-y-auto">
+                  {clientResults.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => selectClient(c)}
+                      className="w-full flex justify-between px-3 py-2 text-sm hover:bg-gray-50 text-left"
+                    >
+                      <span>
+                        {c.name}
+                        <span className="text-xs text-gray-400 ml-2">T{c.price_tier ?? 1}</span>
+                      </span>
+                      <span className="text-gray-400 text-xs">
+                        {[c.tax_id, c.city].filter(Boolean).join(" - ")}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
+            <div className="flex gap-2 items-center">
+              <input
+                className="flex-1 border border-gray-200 rounded-md px-3 py-2 text-sm"
+                placeholder="O escribe un cliente rapido (sin registrar)"
+                value={quickClientName}
+                onChange={(e) => setQuickClientName(e.target.value)}
+              />
+              <button
+                onClick={() => {
+                  setClientForm({ ...emptyClientForm, name: quickClientName });
+                  setShowClientForm(true);
+                }}
+                className="text-sm border border-gray-300 rounded-md px-3 py-2 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors whitespace-nowrap"
+              >
+                {quickClientName ? "Registrar completo" : "+ Nuevo cliente"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {showClientForm && (
+          <div className="mt-3 border-t border-gray-200 pt-3 grid grid-cols-2 gap-2">
+            {(
+              [
+                ["name", "Nombre o empresa"],
+                ["tax_id", "RIF o cedula"],
+                ["fiscal_address", "Direccion fiscal"],
+                ["phone", "Telefono"],
+                ["city", "Ciudad"],
+                ["state", "Estado"],
+                ["salesperson", "Vendedor"],
+              ] as [keyof typeof clientForm, string][]
+            ).map(([f, label]) => (
+              <input
+                key={f}
+                className="border border-gray-200 rounded-md px-3 py-2 text-sm"
+                placeholder={label}
+                value={clientForm[f]}
+                onChange={(e) => setClientForm((x) => ({ ...x, [f]: e.target.value }))}
+              />
+            ))}
+            <div>
+              <select
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+                value={clientForm.price_tier}
+                onChange={(e) => setClientForm((x) => ({ ...x, price_tier: e.target.value }))}
+              >
+                <option value="1">Tarifa 1 (contado)</option>
+                <option value="2">Tarifa 2 (credito)</option>
+                <option value="3">Tarifa 3</option>
+                <option value="4">Tarifa 4</option>
+              </select>
+            </div>
+            <div className="col-span-2 flex justify-end gap-2 mt-1">
+              <button onClick={() => setShowClientForm(false)} className="text-sm text-gray-500 px-3 py-1.5">
+                Cancelar
+              </button>
+              <button
+                onClick={saveClient}
+                disabled={savingClient || !clientForm.name}
+                className="text-sm bg-gray-900 text-white rounded-md px-3 py-1.5 disabled:opacity-40"
+              >
+                {savingClient ? "Guardando..." : "Guardar cliente"}
+              </button>
+            </div>
           </div>
-
-          <div className="flex gap-2.5 px-3 py-1.5 border-b border-gray-100 text-[10.5px] text-gray-400">
-            <span className="w-3.5" />
-            <span className="w-8">nº</span>
-            <span className="w-12">fecha</span>
-            <span className="flex-1 min-w-0">cliente</span>
-            <span className="w-14">cobro</span>
-            {verGanancia && <span className="w-14 text-right">ganancia</span>}
-            <span className="w-[124px] text-right">monto</span>
-          </div>
-
-          {loading && <p className="text-sm text-gray-400 p-4">Cargando...</p>}
-
-          {!loading && filtered.length === 0 && (
-            <p className="text-sm text-gray-400 p-6">No hay notas que coincidan.</p>
-          )}
-
-          <div className="select-none">
-            {filtered.map((n, idx) => {
-              const m = moneda(n.currency_mode);
-              const pct = n.total > 0 ? Math.min((n.paid_usd / n.total) * 100, 100) : 0;
-              const anulada = n.effective_status === "ANULADO";
-              const d = new Date(n.note_date + "T00:00:00");
-              const tasa = effectiveRate(n.currency_mode, n.exchange_rate, n.exchange_gap_percent);
-              const profit = n.total - n.total_cost;
-              const isSel = selected.has(n.id);
-              // en las ultimas filas el cuadro se abre hacia arriba
-              const haciaArriba = filtered.length > 4 && idx >= filtered.length - 4;
-              return (
-                <div
-                  key={n.id}
-                  onMouseDown={(e) => {
-                    if ((e.target as HTMLElement).closest("a,button")) return;
-                    dragging.current = true;
-                    dragAdds.current = !isSel;
-                    setSel(n.id, !isSel);
-                  }}
-                  onMouseEnter={() => {
-                    if (dragging.current) setSel(n.id, dragAdds.current);
-                  }}
-                  className={`group relative flex gap-2.5 items-center px-3 py-[7px] border-b border-gray-50 text-[12.5px] cursor-default ${
-                    isSel ? "bg-indigo-50/60" : "hover:bg-gray-50"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSel}
-                    onChange={() => setSel(n.id, !isSel)}
-                    className="w-3 h-3 shrink-0"
-                  />
-                  <span className="w-8 text-[10.5px] text-gray-400 font-mono shrink-0">
-                    {n.sequence_number}
-                  </span>
-                  <span className="w-12 text-gray-500 shrink-0">
-                    {DIAS_CORTOS[d.getDay()]} {d.getDate()}
-                  </span>
-                  <span className="flex-1 min-w-0 truncate">
-                    <Link
-                      href={`/notas/nueva?id=${n.id}`}
-                      className={
-                        anulada
-                          ? "text-gray-400 line-through"
-                          : "text-gray-800 hover:text-indigo-700 hover:underline"
-                      }
-                    >
-                      {n.display_name}
-                    </Link>
-                    {n.days_overdue > 0 && (
-                      <span className="ml-2 text-[10px] text-red-600">
-                        vencida {n.days_overdue}d
-                      </span>
-                    )}
-                    {n.returned_usd > 0 && (
-                      <span className="ml-2 text-[10px] text-orange-700">
-                        −{money(n.returned_usd)} dev
-                      </span>
-                    )}
-                  </span>
-                  <span className="w-14 shrink-0 h-[3px] bg-gray-100 rounded-full overflow-hidden">
-                    <span
-                      className="block h-full bg-emerald-500"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </span>
-                  {verGanancia && (
-                    <span
-                      className={`w-14 text-right shrink-0 ${
-                        profit < 0 ? "text-red-600" : "text-emerald-700"
-                      }`}
-                    >
-                      {money(profit)}
-                    </span>
-                  )}
-                  <span className="w-[124px] shrink-0 flex items-center justify-end gap-1.5">
-                    <span className={`text-[10.5px] px-1.5 py-[1px] rounded-full ${m.pill}`}>
-                      {m.label}
-                    </span>
-                    <span className={`w-14 text-right ${anulada ? "text-gray-400" : ""}`}>
-                      {money(n.total)}
-                    </span>
-                  </span>
-
-                  {/* cuadro de detalle */}
-                  <div
-                    className={`hidden group-hover:block absolute right-3 z-30 w-[290px] bg-gray-800 rounded-xl px-3.5 py-3 shadow-xl ${
-                      haciaArriba ? "bottom-full mb-1" : "top-full mt-1"
-                    }`}
-                  >
-                    <Fila k="Fecha" v={fechaLarga(n.note_date)} />
-                    <Fila k="Moneda" v={m.largo} />
-                    {n.currency_mode !== "USD" && (
-                      <>
-                        <Fila
-                          k="Tasa usada"
-                          v={
-                            tasa > 0
-                              ? tasa.toLocaleString("en-US", { maximumFractionDigits: 4 })
-                              : "sin tasa"
-                          }
-                        />
-                        <Fila
-                          k={`Cobrado en ${m.corto}`}
-                          v={tasa > 0 ? miles(n.total * tasa) : "—"}
-                        />
-                      </>
-                    )}
-                    {n.discount > 0 && <Fila k="Descuento" v={`$${money(n.discount)}`} />}
-                    {n.returned_usd > 0 && (
-                      <Fila
-                        k="Devuelto"
-                        v={`−$${money(n.returned_usd)}`}
-                        tone="text-orange-300"
-                      />
-                    )}
-                    {n.credit_usd > 0 && (
-                      <Fila
-                        k="Saldo a favor"
-                        v={`$${money(n.credit_usd)}`}
-                        tone="text-sky-300"
-                      />
-                    )}
-                    <div className="h-px bg-gray-600 my-1.5" />
-                    <Fila k="Abonado" v={`$${money(n.paid_usd)}`} tone="text-emerald-300" />
-                    <Fila
-                      k="Falta"
-                      v={n.pending_usd > 0.005 ? `$${money(n.pending_usd)}` : "nada, cobrada"}
-                      tone={n.pending_usd > 0.005 ? "text-red-300" : "text-emerald-300"}
-                    />
-                    {n.due_date && n.pending_usd > 0.005 && (
-                      <Fila
-                        k="Vence"
-                        v={
-                          n.days_overdue > 0
-                            ? `${n.due_date} · vencida ${n.days_overdue}d`
-                            : n.due_date
-                        }
-                        tone={n.days_overdue > 0 ? "text-red-300" : "text-gray-200"}
-                      />
-                    )}
-                    <div className="flex gap-3 mt-2">
-                      {!anulada && n.pending_usd > 0.005 && (
-                        <button
-                          onClick={() => setAbonarId(n.id)}
-                          className="text-[11px] text-emerald-300 hover:text-emerald-200"
-                        >
-                          abonar
-                        </button>
-                      )}
-                      <Link
-                        href={`/notas/ver?id=${n.id}`}
-                        className="text-[11px] text-gray-300 hover:text-white"
-                      >
-                        ver
-                      </Link>
-                      <Link
-                        href={`/notas/nueva?id=${n.id}`}
-                        className="text-[11px] text-gray-300 hover:text-white"
-                      >
-                        editar
-                      </Link>
-                      {!anulada && (
-                        <button
-                          onClick={() => setDevolverId(n.id)}
-                          className="text-[11px] text-orange-300 hover:text-orange-200"
-                        >
-                          devolver
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleDelete(n.id)}
-                        className="text-[11px] text-gray-500 hover:text-red-300 ml-auto"
-                      >
-                        borrar
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* ---------- pie ---------- */}
-          <div className="flex items-center gap-3 px-3 py-2 border-t border-gray-200 bg-gray-50 text-[11.5px]">
-            {totals.selCount > 0 ? (
-              <span className="text-indigo-700">
-                {totals.selCount} seleccionadas{" "}
-                <b className="font-medium">${money(totals.sel)}</b>
-                <button
-                  onClick={() => setSelected(new Set())}
-                  className="ml-2 text-gray-400 hover:text-gray-700 underline"
-                >
-                  quitar
-                </button>
-              </span>
-            ) : (
-              <span className="text-gray-400">
-                arrastra sobre las filas para ir sumando
-              </span>
-            )}
-            <span className="ml-auto text-gray-500">
-              {month !== null ? MESES_CORTOS[month] : quarter !== null ? `${quarter + 1}T` : "periodo"}{" "}
-              <b className="font-medium text-gray-900">${miles(totals.mes)}</b>
-            </span>
-            <span className="text-gray-500">
-              año <b className="font-medium text-gray-900">${miles(totals.anio)}</b>
-            </span>
-            <span className="text-gray-500">
-              por cobrar{" "}
-              <b className="font-medium text-amber-700">${miles(totals.porCobrar)}</b>
-            </span>
-          </div>
-        </section>
+        )}
       </div>
 
-      {abonarId && abonarNote && (
-        <AbonarModal
-          noteId={abonarId}
-          defaultCurrency={abonarNote.currency_mode}
-          defaultRate={effectiveRate(
-            abonarNote.currency_mode,
-            abonarNote.exchange_rate,
-            abonarNote.exchange_gap_percent
+      {/* Buscar producto */}
+      <div className="mb-2 relative">
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-xs text-gray-500">Buscar producto</label>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowPicker(true)}
+              className="text-xs border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
+            >
+              Ver catalogo
+            </button>
+            <button
+              onClick={addManualProduct}
+              className="text-xs border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
+            >
+              + Producto manual
+            </button>
+          </div>
+        </div>
+        <input
+          id="buscador"
+          className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+          placeholder="Codigo o descripcion — Enter agrega el primero, Tab pasa al siguiente campo"
+          value={query}
+          onChange={(e) => searchProducts(e.target.value)}
+          onKeyDown={async (e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            const next = items.length;
+            if (results.length > 0) {
+              addProduct(results[0], tier);
+              focusEl(`cant-${next}`);
+              return;
+            }
+            // el usuario escribio rapido y la busqueda aun no responde:
+            // se resuelve al vuelo, priorizando coincidencia exacta de codigo
+            const text = query.trim();
+            if (!text) return;
+            const { data } = await supabase.rpc("search_products", { search_text: text });
+            const hits = (data ?? []) as PickerProduct[];
+            if (hits.length === 0) {
+              setError(`No se encontro "${text}".`);
+              return;
+            }
+            const norm = (s: string) => s.replace(/\s+/g, "").toUpperCase();
+            const exact = hits.find((h) => norm(h.code) === norm(text));
+            addProduct(exact ?? hits[0], tier);
+            focusEl(`cant-${next}`);
+          }}
+        />
+        {results.length > 0 && (
+          <div className="border border-gray-200 rounded-md mt-1 bg-white shadow-sm max-h-72 overflow-y-auto">
+            {results.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => addProduct(p, tier)}
+                className="w-full flex justify-between px-3 py-2 text-sm hover:bg-gray-50 text-left"
+              >
+                <span>
+                  <span className="text-gray-400">{p.code}</span> - {p.description}
+                  <span className="text-gray-400 text-xs ml-2">{p.category}</span>
+                </span>
+                <span className="text-gray-500">${priceOf(p, tier).toFixed(2)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <table className="w-full text-sm my-6">
+        <thead>
+          <tr className="text-xs text-gray-400 text-left">
+            <th className="font-normal py-1 w-24">Codigo</th>
+            <th className="font-normal py-1">Producto</th>
+            <th className="font-normal py-1 w-14">Cant.</th>
+            <th className="font-normal py-1 w-36">Precio</th>
+            <th className="font-normal py-1 w-20 text-right">Total</th>
+            {isForeign && <th className="font-normal py-1 w-24 text-right">{curLabel}</th>}
+            <th className="w-6"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((it, i) => (
+            <tr key={i} className="border-t border-gray-100 align-top">
+              <td className="py-2">
+                <input
+                  id={`cod-${i}`}
+                  className={`w-24 border rounded px-2 py-1 text-xs ${
+                    it.product_id
+                      ? "border-gray-200 text-gray-500"
+                      : "border-amber-300 bg-amber-50/60"
+                  }`}
+                  placeholder="Codigo"
+                  value={it.code_snapshot}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => updateItemText(i, "code_snapshot", e.target.value)}
+                  onKeyDown={(e) => onGridKey(e, i, 0)}
+                />
+                {!it.product_id && it.code_snapshot.trim() && it.description_snapshot.trim() && (
+                  <button
+                    onClick={() => saveManualToCatalog(i)}
+                    className="block text-[10px] text-indigo-600 hover:text-indigo-800 mt-1"
+                  >
+                    guardar en catalogo
+                  </button>
+                )}
+              </td>
+              <td className="py-2">
+                <input
+                  id={`desc-${i}`}
+                  className="w-full border border-gray-200 rounded px-2 py-1"
+                  placeholder="Descripcion"
+                  value={it.description_snapshot}
+                  onChange={(e) => updateItemText(i, "description_snapshot", e.target.value)}
+                  onKeyDown={(e) => onGridKey(e, i, 1)}
+                />
+              </td>
+              <td className="py-2">
+                <NumInput
+                  id={`cant-${i}`}
+                  className="w-12 border border-gray-200 rounded px-2 py-1"
+                  value={it.quantity}
+                  onChange={(n) => updateItem(i, "quantity", n)}
+                  onKeyDown={(e) => onGridKey(e, i, 2)}
+                />
+              </td>
+              <td className="py-2">
+                <NumInput
+                  id={`prec-${i}`}
+                  className="w-20 border border-gray-200 rounded px-2 py-1"
+                  value={it.unit_price}
+                  onChange={(n) => updateItem(i, "unit_price", n)}
+                  onKeyDown={(e) => onGridKey(e, i, 3)}
+                />
+                {it.prices && (
+                  <div className="mt-1 flex items-center gap-1">
+                    {[1, 2, 3, 4].map((t) =>
+                      it.prices?.[t - 1] != null ? (
+                        <button
+                          key={t}
+                          onClick={() => setLineTier(i, t)}
+                          title={`Precio ${t}: $${Number(it.prices?.[t - 1]).toFixed(2)}`}
+                          className={`text-[10px] rounded px-1.5 py-0.5 border transition-colors ${
+                            it.price_tier_used === t
+                              ? "bg-gray-900 text-white border-gray-900"
+                              : "border-gray-300 text-gray-500 hover:bg-gray-100"
+                          }`}
+                        >
+                          T{t}
+                        </button>
+                      ) : null
+                    )}
+                    {it.price_tier_used === null && (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 rounded px-1.5 py-0.5">
+                        manual
+                      </span>
+                    )}
+                  </div>
+                )}
+              </td>
+              <td className="py-2 text-right">
+                ${it.line_total.toFixed(2)}
+                {showProfit && (
+                  <div className="mt-1 flex items-center justify-end gap-1">
+                    <span className="text-[10px] text-gray-400">costo</span>
+                    <NumInput
+                      className="w-14 border border-gray-200 rounded px-1 py-0.5 text-[11px] text-right"
+                      value={it.cost_snapshot}
+                      onChange={(n) => updateItem(i, "cost_snapshot", n)}
+                      ariaLabel="Costo de la linea"
+                    />
+                    <span
+                      className={`text-[10px] rounded px-1.5 py-0.5 ${
+                        it.cost_snapshot <= 0
+                          ? "bg-gray-100 text-gray-500"
+                          : it.unit_price / it.cost_snapshot - 1 < 0
+                          ? "bg-red-100 text-red-800"
+                          : it.unit_price / it.cost_snapshot - 1 < 0.15
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-green-100 text-green-800"
+                      }`}
+                    >
+                      {it.cost_snapshot > 0
+                        ? `${(((it.unit_price - it.cost_snapshot) / it.cost_snapshot) * 100).toFixed(0)}%`
+                        : "sin costo"}
+                    </span>
+                  </div>
+                )}
+              </td>
+              {isForeign && (
+                <td className="py-2 text-right text-gray-700">
+                  {fmt(it.line_total * effectiveRate)}
+                </td>
+              )}
+              <td className="py-2 text-right">
+                <button onClick={() => removeItem(i)} className="text-gray-400 hover:text-red-500">
+                  x
+                </button>
+              </td>
+            </tr>
+          ))}
+
+          {/* Linea vacia: escribe el codigo y Enter la convierte en linea real */}
+          <tr className="border-t border-gray-100">
+            <td className="py-2 relative" colSpan={2}>
+              <input
+                id="cod-nuevo"
+                autoComplete="off"
+                className="w-56 border border-dashed border-gray-300 rounded px-2 py-1 text-xs focus:border-solid focus:border-brand-400 focus:outline-none transition-colors"
+                placeholder="Codigo o nombre, y Enter..."
+                value={newCode}
+                onChange={(e) => suggestNew(e.target.value)}
+                onKeyDown={addByCode}
+                onBlur={() => setTimeout(() => setNewHits([]), 150)}
+              />
+              {codeError && <span className="text-xs text-amber-700 ml-2">{codeError}</span>}
+
+              {newHits.length > 0 && (
+                <div className="absolute left-0 top-full mt-1 z-30 w-[440px] bg-white border border-gray-200 rounded-xl shadow-pop p-1">
+                  {newHits.map((h, k) => (
+                    <button
+                      key={h.id}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        pickNew(h);
+                      }}
+                      onMouseEnter={() => setNewActive(k)}
+                      className={`w-full flex items-baseline gap-2.5 px-2.5 py-1.5 rounded-lg text-left ${
+                        k === newActive ? "bg-brand-50" : ""
+                      }`}
+                    >
+                      <span className="w-20 shrink-0 font-mono text-[10.5px] text-gray-500 truncate">
+                        {h.code}
+                      </span>
+                      <span className="flex-1 min-w-0 truncate text-[12.5px] text-gray-800">
+                        {h.description}
+                      </span>
+                      <span className="shrink-0 text-[12px] text-gray-900">
+                        ${priceOf(h, tier).toFixed(2)}
+                      </span>
+                    </button>
+                  ))}
+                  <p className="px-2.5 pt-1 pb-0.5 text-[10.5px] text-gray-400 border-t border-gray-100 mt-1">
+                    ↑↓ para moverte · Enter para agregar · Esc para cerrar
+                  </p>
+                </div>
+              )}
+            </td>
+            <td colSpan={isForeign ? 4 : 3} className="py-2 text-xs text-gray-400">
+              Enter agrega · luego Enter pasa a cantidad, precio, y vuelve aqui
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* Cobro */}
+      <div className="mb-4 border border-gray-200 rounded-lg p-4 flex gap-3 items-end flex-wrap">
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Estado de cobro</label>
+          <select
+            className="border border-gray-200 rounded-md px-3 py-2 text-sm"
+            value={paymentStatus}
+            onChange={(e) => setPaymentStatus(e.target.value)}
+          >
+            <option value="PENDIENTE">Pendiente</option>
+            <option value="COBRADO">Cobrado</option>
+            <option value="ANULADO">Anulado</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Fecha de vencimiento</label>
+          <input
+            type="date"
+            className="border border-gray-200 rounded-md px-3 py-2 text-sm"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Moneda */}
+      <div className="mb-6 border border-gray-200 rounded-lg p-4">
+        <label className="text-xs text-gray-500 block mb-2">Moneda de la nota</label>
+        <div
+          role="radiogroup"
+          aria-label="Moneda de la nota"
+          className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-gray-100 mb-3"
+        >
+          {(
+            [
+              { k: "USD", t: "Dolares", s: "USD" },
+              { k: "COP", t: "Pesos", s: "colombianos" },
+              { k: "BS_BINANCE", t: "Bs Binance", s: "tasa Binance" },
+              { k: "BS_BCV", t: "Bs BCV", s: "tasa BCV + brecha" },
+            ] as { k: CurrencyMode; t: string; s: string }[]
+          ).map((m) => {
+            const on = currencyMode === m.k;
+            return (
+              <button
+                key={m.k}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => setCurrencyMode(m.k)}
+                className={`rounded-lg px-2 py-1.5 text-center transition-colors ${
+                  on
+                    ? "bg-white shadow-card ring-1 ring-brand-200 text-brand-800"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
+                }`}
+              >
+                <span className="block text-[13px] font-medium leading-tight">{m.t}</span>
+                <span
+                  className={`block text-[10.5px] leading-tight ${
+                    on ? "text-brand-500" : "text-gray-400"
+                  }`}
+                >
+                  {m.s}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {isForeign && (
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="text-xs text-gray-500 block mb-1">
+                Tasa del dia ({curLabel} por USD)
+              </label>
+              <NumInput
+                className={`w-full border rounded-md px-3 py-2 text-sm ${
+                  exchangeRate > 0 ? "border-gray-200" : "border-amber-300 bg-amber-50/40"
+                }`}
+                value={exchangeRate}
+                onChange={setExchangeRate}
+                placeholder="escribe la tasa de hoy"
+                ariaLabel="Tasa del dia"
+              />
+            </div>
+            {currencyMode === "BS_BCV" && (
+              <div className="flex-1">
+                <label className="text-xs text-gray-500 block mb-1">Ajuste de brecha (%)</label>
+                <NumInput
+                  className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+                  value={gapPercent}
+                  onChange={setGapPercent}
+                  ariaLabel="Ajuste de brecha"
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-between items-start gap-4 mb-6">
+        <div>
+          <button
+            onClick={() => setShowProfit((s) => !s)}
+            className="text-xs border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
+          >
+            {showProfit ? "Ocultar rentabilidad" : "Ver rentabilidad"}
+          </button>
+          {showProfit && (
+            <div className="mt-2 bg-gray-50 rounded-lg p-3 text-sm w-60">
+              <div className="flex justify-between text-gray-500 py-0.5">
+                <span>Costo total</span>
+                <span>${totalCost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-gray-500 py-0.5">
+                <span>Venta total</span>
+                <span>${total.toFixed(2)}</span>
+              </div>
+              <div
+                className={`flex justify-between font-medium pt-1 mt-1 border-t border-gray-200 ${
+                  profit >= 0 ? "text-green-700" : "text-red-600"
+                }`}
+              >
+                <span>Ganancia</span>
+                <span>
+                  ${profit.toFixed(2)} ({margin.toFixed(1)}%)
+                </span>
+              </div>
+            </div>
           )}
-          onClose={() => setAbonarId(null)}
-          onSaved={() => {
-            setAbonarId(null);
-            load();
-          }}
-        />
+        </div>
+
+        <div className="w-72 text-sm">
+          <div className="flex justify-between text-gray-500 py-1">
+            <span>Subtotal (USD)</span>
+            <span>${subtotal.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between items-center py-1">
+            <span className="text-gray-500">Descuento (%)</span>
+            <NumInput
+              className="w-20 border border-gray-200 rounded px-2 py-1 text-right"
+              value={discountPercent}
+              onChange={setDiscountPercent}
+              ariaLabel="Descuento en porcentaje"
+            />
+          </div>
+          <div className="flex justify-between text-gray-400 text-xs py-1">
+            <span>Descuento aplicado</span>
+            <span>-${discountAmount.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between font-medium text-base border-t border-gray-200 mt-1 pt-2">
+            <span>Total (USD)</span>
+            <span>${total.toFixed(2)}</span>
+          </div>
+          {isForeign && (
+            <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
+              <div className="flex justify-between text-gray-500 py-1">
+                <span>Subtotal ({curLabel})</span>
+                <span>{fmt(subtotal * effectiveRate)}</span>
+              </div>
+              <div className="flex justify-between text-gray-500 py-1">
+                <span>Descuento ({curLabel})</span>
+                <span>-{fmt(discountAmount * effectiveRate)}</span>
+              </div>
+              <div className="flex justify-between font-medium text-base pt-1">
+                <span>Total ({curLabel})</span>
+                <span>{fmt(total * effectiveRate)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <p className="mb-3 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-[13px] text-red-700">
+          {error}
+        </p>
       )}
 
-      {devolverId && (
-        <DevolverModal
-          noteId={devolverId}
-          onClose={() => setDevolverId(null)}
-          onSaved={() => {
-            setDevolverId(null);
-            load();
-          }}
-        />
-      )}
+      {/* barra de guardado: siempre visible, nunca desaparece */}
+      <div className="sticky bottom-0 -mx-8 px-8 py-3 bg-white/90 backdrop-blur border-t border-gray-200 flex items-center gap-3">
+        <div className="flex items-center gap-2 text-[12.5px] min-w-0">
+          {dirty ? (
+            <>
+              <CircleDot size={14} className="text-amber-500 shrink-0" />
+              <span className="text-amber-700">Cambios sin guardar</span>
+            </>
+          ) : currentId ? (
+            <>
+              <Check size={14} className="text-emerald-600 shrink-0" />
+              <span className="text-gray-600">
+                Guardada
+                {savedNoteNumber ? ` · Nota #${String(savedNoteNumber).padStart(4, "0")}` : ""}
+              </span>
+            </>
+          ) : (
+            <span className="text-gray-400">Nota nueva, aun sin guardar</span>
+          )}
+        </div>
 
-      {showBuscar && <BusquedaModal onClose={() => setShowBuscar(false)} />}
+        <div className="ml-auto flex items-center gap-2">
+          {currentId && (
+            <Link
+              href={`/notas/ver?id=${currentId}`}
+              className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg border border-gray-300 text-[13px] text-gray-700 hover:bg-gray-50"
+            >
+              <Eye size={15} strokeWidth={1.75} />
+              Ver / imprimir
+            </Link>
+          )}
+          {currentId && (
+            <button
+              onClick={resetForm}
+              className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg border border-gray-300 text-[13px] text-gray-700 hover:bg-gray-50"
+            >
+              <FilePlus2 size={15} strokeWidth={1.75} />
+              Nueva nota
+            </button>
+          )}
+          <button
+            disabled={saving || items.length === 0 || (!!currentId && !dirty)}
+            onClick={saveNote}
+            className="h-9 inline-flex items-center gap-1.5 px-4 rounded-lg bg-brand-700 text-white text-[13px] font-medium shadow-sm hover:bg-brand-800 disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <Save size={15} strokeWidth={2} />
+            {saving ? "Guardando..." : currentId ? "Guardar cambios" : "Guardar nota"}
+          </button>
+        </div>
+      </div>
     </main>
   );
 }
 
-/* ================= ventana de devolucion ================= */
-
-type LineaVendida = {
-  note_item_id: string;
-  product_id: string | null;
-  code: string;
-  description: string;
-  quantity: number;
-  unit_price: number;
-  supply_type: string;
-  supplier_name: string | null;
-  ya_devuelto: number;
-};
-
-type DevRegistrada = {
-  id: string;
-  numero: number;
-  return_date: string;
-  total: number;
-  items: {
-    code: string;
-    description: string;
-    quantity: number;
-    line_total: number;
-    reason: string | null;
-    destination: string;
-    observation: string | null;
-  }[];
-};
-
-type DatosDev = {
-  total_devuelto: number;
-  lineas_vendidas: LineaVendida[];
-  devoluciones: DevRegistrada[];
-};
-
-const MOTIVOS = [
-  "No era compatible",
-  "Vino defectuoso",
-  "Se daño en el camino",
-  "Pidio otro repuesto",
-  "Se arrepintio",
-  "Le sobro",
-  "Otro",
-];
-
-const DESTINOS: { k: string; l: string; ayuda: string }[] = [
-  { k: "ALMACEN", l: "Vuelve a mi almacen", ayuda: "esta bueno, se vuelve a vender" },
-  { k: "PROVEEDOR", l: "Se lo devuelvo al proveedor", ayuda: "no toca tu stock" },
-  { k: "PERDIDA", l: "Se perdio", ayuda: "vino roto y no lo reclamas" },
-];
-
-function DevolverModal({
-  noteId,
-  onClose,
-  onSaved,
-}: {
-  noteId: string;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [d, setD] = useState<DatosDev | null>(null);
-  const [col, setCol] = useState<Collection | null>(null);
-  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
-  const [sel, setSel] = useState<
-    Record<string, { qty: string; reason: string; destination: string; obs: string }>
-  >({});
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const cargar = useCallback(async () => {
-    const [r1, r2] = await Promise.all([
-      supabase.rpc("note_returns", { p_note_id: noteId }),
-      supabase.rpc("note_collection", { p_note_id: noteId }),
-    ]);
-    if (r1.error) {
-      setErr(r1.error.message);
-      return;
-    }
-    setD(r1.data as DatosDev);
-    if (!r2.error) setCol(r2.data as Collection);
-  }, [noteId]);
-
-  useEffect(() => {
-    cargar();
-  }, [cargar]);
-
-  function marcar(l: LineaVendida) {
-    setSel((p) => {
-      const n = { ...p };
-      if (n[l.note_item_id]) {
-        delete n[l.note_item_id];
-      } else {
-        n[l.note_item_id] = {
-          qty: "1",
-          reason: MOTIVOS[0],
-          destination: l.supply_type === "PEDIDO" ? "PROVEEDOR" : "ALMACEN",
-          obs: "",
-        };
-      }
-      return n;
-    });
-  }
-
-  function editar(id: string, campo: string, valor: string) {
-    setSel((p) => ({ ...p, [id]: { ...p[id], [campo]: valor } }));
-  }
-
-  const resumen = useMemo(() => {
-    if (!d) return { monto: 0, aAlmacen: 0, aProveedor: 0, perdida: 0 };
-    let monto = 0;
-    let aAlmacen = 0;
-    let aProveedor = 0;
-    let perdida = 0;
-    for (const l of d.lineas_vendidas) {
-      const s = sel[l.note_item_id];
-      if (!s) continue;
-      const q = Number(s.qty.replace(",", ".")) || 0;
-      monto += q * l.unit_price;
-      if (s.destination === "ALMACEN") aAlmacen += q;
-      else if (s.destination === "PROVEEDOR") aProveedor += q;
-      else perdida += q;
-    }
-    return { monto, aAlmacen, aProveedor, perdida };
-  }, [sel, d]);
-
-  async function guardar() {
-    setErr(null);
-    const items = Object.entries(sel)
-      .map(([id, s]) => ({
-        note_item_id: id,
-        quantity: Number(s.qty.replace(",", ".")) || 0,
-        reason: s.reason,
-        destination: s.destination,
-        observation: s.obs,
-      }))
-      .filter((i) => i.quantity > 0);
-
-    if (items.length === 0) {
-      setErr("Marca al menos una linea y ponle cantidad.");
-      return;
-    }
-    setBusy(true);
-    const { error } = await supabase.rpc("create_return", {
-      p_note_id: noteId,
-      p_return_date: fecha,
-      p_items: items,
-      p_notes: null,
-    });
-    setBusy(false);
-    if (error) {
-      setErr(error.message);
-      return;
-    }
-    onSaved();
-  }
-
-  async function borrar(id: string) {
-    if (!confirm("¿Eliminar esta devolucion? La mercancia vuelve a contarse como vendida."))
-      return;
-    const { error } = await supabase.rpc("delete_return", { p_return_id: id });
-    if (error) {
-      setErr(error.message);
-      return;
-    }
-    cargar();
-  }
-
-  const nuevaDeuda = col
-    ? Math.max(col.neto - resumen.monto - col.paid, 0)
-    : 0;
-
+export default function NuevaNotaPage() {
   return (
-    <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-xl w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-baseline justify-between mb-1">
-          <h2 className="text-base font-semibold text-gray-900">
-            Devolver {col ? `de la nota ${col.sequence_number}` : ""}
-          </h2>
-          <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-900">
-            cerrar
-          </button>
-        </div>
-        <p className="text-xs text-gray-500 mb-4">
-          {col?.display_name} · marca lo que el cliente trajo de vuelta
-        </p>
-
-        <div className="flex items-center gap-2 mb-3">
-          <label className="text-[11px] text-gray-500">Fecha</label>
-          <input
-            type="date"
-            value={fecha}
-            onChange={(e) => setFecha(e.target.value)}
-            className="h-8 px-2 border border-gray-300 rounded-lg text-sm"
-          />
-        </div>
-
-        {d?.lineas_vendidas.map((l) => {
-          const s = sel[l.note_item_id];
-          const disponible = l.quantity - l.ya_devuelto;
-          return (
-            <div
-              key={l.note_item_id}
-              className={`border rounded-xl p-3 mb-2 ${
-                s ? "border-indigo-300" : "border-gray-200"
-              } ${disponible <= 0 ? "opacity-50" : ""}`}
-            >
-              <div className="flex gap-2 items-center">
-                <input
-                  type="checkbox"
-                  checked={!!s}
-                  disabled={disponible <= 0}
-                  onChange={() => marcar(l)}
-                  className="w-3.5 h-3.5 shrink-0"
-                />
-                <span className="flex-1 min-w-0 truncate text-[13px]">
-                  {l.description}
-                </span>
-                <span
-                  className={`text-[10.5px] px-1.5 py-[1px] rounded-full shrink-0 ${
-                    l.supply_type === "PEDIDO"
-                      ? "bg-violet-50 text-violet-800"
-                      : "bg-emerald-50 text-emerald-800"
-                  }`}
-                >
-                  {l.supply_type === "PEDIDO" ? "bajo pedido" : "de almacen"}
-                </span>
-                <span className="text-[11.5px] text-gray-500 shrink-0">
-                  vendio {l.quantity}
-                  {l.ya_devuelto > 0 && ` · devolvio ${l.ya_devuelto}`}
-                </span>
-                {s && (
-                  <input
-                    value={s.qty}
-                    onChange={(e) => editar(l.note_item_id, "qty", e.target.value)}
-                    className="w-14 h-7 px-2 border border-indigo-300 rounded-lg text-sm text-right shrink-0"
-                  />
-                )}
-                <span className="w-16 text-right text-[13px] shrink-0">
-                  {s
-                    ? money((Number(s.qty.replace(",", ".")) || 0) * l.unit_price)
-                    : money(l.unit_price)}
-                </span>
-              </div>
-
-              {s && (
-                <div className="mt-2.5">
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div>
-                      <label className="block text-[10.5px] text-gray-500 mb-1">
-                        Motivo
-                      </label>
-                      <select
-                        value={s.reason}
-                        onChange={(e) => editar(l.note_item_id, "reason", e.target.value)}
-                        className="w-full h-8 px-2 border border-gray-300 rounded-lg text-[12.5px]"
-                      >
-                        {MOTIVOS.map((m) => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10.5px] text-gray-500 mb-1">
-                        ¿A donde va?
-                      </label>
-                      <select
-                        value={s.destination}
-                        onChange={(e) =>
-                          editar(l.note_item_id, "destination", e.target.value)
-                        }
-                        className="w-full h-8 px-2 border border-gray-300 rounded-lg text-[12.5px]"
-                      >
-                        {DESTINOS.map((x) => (
-                          <option key={x.k} value={x.k}>
-                            {x.l}
-                            {x.k === "PROVEEDOR" && l.supplier_name
-                              ? ` (${l.supplier_name})`
-                              : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <input
-                    value={s.obs}
-                    onChange={(e) => editar(l.note_item_id, "obs", e.target.value)}
-                    placeholder="Observacion: que paso exactamente"
-                    className="w-full h-8 px-2.5 border border-gray-200 rounded-lg text-[12.5px]"
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {resumen.monto > 0 && col && (
-          <div className="p-3 rounded-lg bg-emerald-50 text-[12.5px] text-emerald-800 leading-relaxed mb-3">
-            {resumen.aAlmacen > 0 && (
-              <div>· {resumen.aAlmacen} unidades vuelven a tu almacen</div>
-            )}
-            {resumen.aProveedor > 0 && (
-              <div>· {resumen.aProveedor} no tocan tu stock, van de vuelta al proveedor</div>
-            )}
-            {resumen.perdida > 0 && (
-              <div>· {resumen.perdida} se pierden</div>
-            )}
-            <div>
-              · el cliente deja de deber{" "}
-              <b className="font-medium">${money(resumen.monto)}</b>
-              {nuevaDeuda > 0
-                ? `, le queda debiendo $${money(nuevaDeuda)}`
-                : ", queda en cero"}
-            </div>
-          </div>
-        )}
-
-        {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
-
-        <div className="flex gap-2 mb-5">
-          <button
-            onClick={guardar}
-            disabled={busy || resumen.monto <= 0}
-            className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-700 disabled:opacity-40"
-          >
-            {busy ? "Guardando..." : "Guardar devolucion"}
-          </button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50"
-          >
-            Cancelar
-          </button>
-        </div>
-
-        {d && d.devoluciones.length > 0 && (
-          <div className="border-t border-gray-100 pt-3">
-            <p className="text-[11px] text-gray-400 mb-2">
-              Devoluciones ya registradas de esta nota
-            </p>
-            {d.devoluciones.map((r) => (
-              <div
-                key={r.id}
-                className="group border border-orange-200 bg-orange-50/50 rounded-lg p-2.5 mb-2"
-              >
-                <div className="flex items-baseline gap-2 text-[12.5px]">
-                  <span className="text-orange-800">
-                    D-{String(r.numero).padStart(3, "0")} · {r.return_date}
-                  </span>
-                  <span className="ml-auto text-orange-900">−${money(r.total)}</span>
-                  <button
-                    onClick={() => borrar(r.id)}
-                    className="text-[11px] text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
-                  >
-                    eliminar
-                  </button>
-                </div>
-                {r.items.map((it, i) => (
-                  <div key={i} className="text-[11.5px] text-gray-600 mt-1">
-                    {it.quantity} × {it.description} · {it.reason} ·{" "}
-                    {it.destination === "ALMACEN"
-                      ? "volvio al almacen"
-                      : it.destination === "PROVEEDOR"
-                      ? "al proveedor"
-                      : "perdida"}
-                    {it.observation && ` · ${it.observation}`}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Fila({ k, v, tone }: { k: string; v: string; tone?: string }) {
-  return (
-    <div className="flex justify-between text-[12px] py-[2px]">
-      <span className="text-gray-400">{k}</span>
-      <span className={tone ?? "text-gray-100"}>{v}</span>
-    </div>
-  );
-}
-
-/* ================= ventana de abono ================= */
-
-function AbonarModal({
-  noteId,
-  defaultCurrency,
-  defaultRate,
-  onClose,
-  onSaved,
-}: {
-  noteId: string;
-  defaultCurrency: string;
-  defaultRate: number;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [col, setCol] = useState<Collection | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
-  const [mon, setMon] = useState(defaultCurrency);
-  const [monto, setMonto] = useState("");
-  const [tasa, setTasa] = useState(defaultRate > 0 ? String(defaultRate) : "");
-  const [metodo, setMetodo] = useState("");
-  const [refe, setRefe] = useState("");
-
-  const cargar = useCallback(async () => {
-    const { data, error } = await supabase.rpc("note_collection", { p_note_id: noteId });
-    if (error) {
-      setErr(error.message);
-      return;
-    }
-    setCol(data as Collection);
-  }, [noteId]);
-
-  useEffect(() => {
-    cargar();
-  }, [cargar]);
-
-  const montoNum = Number(monto.replace(",", ".")) || 0;
-  const tasaNum = Number(tasa.replace(",", ".")) || 0;
-  const equivale = mon === "USD" ? montoNum : tasaNum > 0 ? montoNum / tasaNum : 0;
-  const quedaria = col ? Math.max(col.pending - equivale, 0) : 0;
-
-  async function guardar() {
-    setErr(null);
-    if (montoNum <= 0) {
-      setErr("Escribe el monto del abono.");
-      return;
-    }
-    if (mon !== "USD" && tasaNum <= 0) {
-      setErr("Falta la tasa de cambio.");
-      return;
-    }
-    setBusy(true);
-    const { error } = await supabase.rpc("add_note_payment", {
-      p_note_id: noteId,
-      p_payment_date: fecha,
-      p_currency_mode: mon,
-      p_amount_currency: montoNum,
-      p_exchange_rate: mon === "USD" ? null : tasaNum,
-      p_method: metodo || null,
-      p_reference: refe || null,
-    });
-    setBusy(false);
-    if (error) {
-      setErr(error.message);
-      return;
-    }
-    onSaved();
-  }
-
-  async function anular(id: string) {
-    if (!confirm("¿Anular este abono? Queda registrado pero deja de contar.")) return;
-    const { error } = await supabase.rpc("void_note_payment", { p_payment_id: id });
-    if (error) {
-      setErr(error.message);
-      return;
-    }
-    cargar();
-  }
-
-  return (
-    <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-baseline justify-between mb-3">
-          <h2 className="text-base font-semibold text-gray-900">
-            Abonar {col ? `· nota ${col.sequence_number}` : ""}
-          </h2>
-          {col && (
-            <span className="text-xs text-gray-500">
-              falta <b className="text-red-600 font-medium">${money(col.pending)}</b> de $
-              {money(col.total)}
-            </span>
-          )}
-        </div>
-
-        {col && <p className="text-sm text-gray-700 mb-4">{col.display_name}</p>}
-
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <div>
-            <label className="block text-[11px] text-gray-500 mb-1">Fecha</label>
-            <input
-              type="date"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] text-gray-500 mb-1">Recibí en</label>
-            <select
-              value={mon}
-              onChange={(e) => setMon(e.target.value)}
-              className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-sm"
-            >
-              {MONEDAS.map((c) => (
-                <option key={c.key} value={c.key}>{c.largo}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[11px] text-gray-500 mb-1">Monto recibido</label>
-            <input
-              value={monto}
-              onChange={(e) => setMonto(e.target.value)}
-              placeholder="0"
-              className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] text-gray-500 mb-1">
-              Tasa {mon === "USD" && <span className="text-gray-300">(no aplica)</span>}
-            </label>
-            <input
-              value={mon === "USD" ? "" : tasa}
-              onChange={(e) => setTasa(e.target.value)}
-              disabled={mon === "USD"}
-              placeholder="0"
-              className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-sm disabled:bg-gray-50"
-            />
-          </div>
-        </div>
-
-        {montoNum > 0 && col && (
-          <div className="mb-3 p-2.5 rounded-lg bg-emerald-50 text-sm text-emerald-800">
-            Equivale a <b className="font-medium">${money(equivale)}</b> — la nota quedaría en{" "}
-            <b className="font-medium">${money(quedaria)}</b> pendiente
-            {quedaria <= 0.005 && <span className="ml-1">(cobrada completa)</span>}
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <input
-            value={metodo}
-            onChange={(e) => setMetodo(e.target.value)}
-            placeholder="Metodo (efectivo, pago movil...)"
-            className="h-9 px-2.5 border border-gray-300 rounded-lg text-sm"
-          />
-          <input
-            value={refe}
-            onChange={(e) => setRefe(e.target.value)}
-            placeholder="Referencia"
-            className="h-9 px-2.5 border border-gray-300 rounded-lg text-sm"
-          />
-        </div>
-
-        {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
-
-        <div className="flex gap-2 mb-5">
-          <button
-            onClick={guardar}
-            disabled={busy}
-            className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-700 disabled:opacity-50"
-          >
-            {busy ? "Guardando..." : "Registrar abono"}
-          </button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50"
-          >
-            Cerrar
-          </button>
-        </div>
-
-        {col && col.payments.length > 0 && (
-          <div className="border-t border-gray-100 pt-3">
-            <p className="text-[11px] text-gray-400 mb-2">Abonos anteriores</p>
-            {col.payments.map((p) => (
-              <div
-                key={p.id}
-                className="group flex items-center justify-between text-[13px] py-1.5"
-              >
-                <span className={p.voided ? "text-gray-300 line-through" : "text-gray-500"}>
-                  {p.payment_date} · {moneda(p.currency_mode).corto}{" "}
-                  {money(p.amount_currency)}
-                  {p.method ? ` · ${p.method}` : ""}
-                </span>
-                <span className="flex items-center gap-3">
-                  <span className={p.voided ? "text-gray-300 line-through" : "text-gray-900"}>
-                    ${money(p.amount_usd)}
-                  </span>
-                  {!p.voided && (
-                    <button
-                      onClick={() => anular(p.id)}
-                      className="text-[11px] text-gray-300 hover:text-red-600 opacity-0 group-hover:opacity-100"
-                    >
-                      anular
-                    </button>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ================= ventana de busqueda profunda ================= */
-
-function BusquedaModal({ onClose }: { onClose: () => void }) {
-  const [cliente, setCliente] = useState<ClienteHit | null>(null);
-  const [texto, setTexto] = useState("");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
-  const [res, setRes] = useState<Busqueda | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const clienteId = cliente?.id ?? "";
-
-  async function buscar() {
-    setErr(null);
-    if (!clienteId && !texto.trim()) {
-      setErr("Elige un cliente o escribe un producto. Puedes usar solo uno de los dos.");
-      return;
-    }
-    setBusy(true);
-    const { data, error } = await supabase.rpc("deep_search", {
-      p_client_id: clienteId || null,
-      p_text: texto.trim(),
-      p_from: desde || null,
-      p_to: hasta || null,
-    });
-    setBusy(false);
-    if (error) {
-      setErr(error.message);
-      return;
-    }
-    setRes(data as Busqueda);
-  }
-
-  const maxMes = useMemo(() => {
-    if (!res || res.por_mes.length === 0) return 0;
-    return Math.max(...res.por_mes.map((m) => m.unidades));
-  }, [res]);
-
-  const clienteNombre = cliente?.name ?? "";
-
-  return (
-    <div
-      className="fixed inset-0 bg-black/45 flex items-center justify-center z-50 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-xl w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-base font-semibold text-gray-900">Busqueda profunda</h2>
-          <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-900">
-            cerrar
-          </button>
-        </div>
-        <p className="text-xs text-gray-500 mb-4">
-          Busca que le vendiste a quien. Puedes llenar uno solo de los dos campos.
-        </p>
-
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <div>
-            <label className="block text-[11px] text-gray-500 mb-1">Cliente</label>
-            <ClientePicker
-              value={cliente}
-              onChange={setCliente}
-              placeholder="Escribe el nombre, ej: repues"
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] text-gray-500 mb-1">
-              Producto: codigo o nombre
-            </label>
-            <input
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") buscar();
-              }}
-              placeholder="330REPOTEN o cruceta GUT-20"
-              className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-sm"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-2 items-center mb-4">
-          <span className="text-[11px] text-gray-400">desde</span>
-          <input
-            type="date"
-            value={desde}
-            onChange={(e) => setDesde(e.target.value)}
-            className="h-8 px-2 border border-gray-200 rounded-lg text-xs"
-          />
-          <span className="text-[11px] text-gray-400">hasta</span>
-          <input
-            type="date"
-            value={hasta}
-            onChange={(e) => setHasta(e.target.value)}
-            className="h-8 px-2 border border-gray-200 rounded-lg text-xs"
-          />
-          <button
-            onClick={buscar}
-            disabled={busy}
-            className="ml-auto px-4 h-8 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-700 disabled:opacity-50"
-          >
-            {busy ? "Buscando..." : "Buscar"}
-          </button>
-        </div>
-
-        {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
-
-        {res && res.lineas_count === 0 && (
-          <div className="p-3 rounded-lg bg-gray-50 text-sm text-gray-600">
-            No hay resultados. {clienteNombre && texto
-              ? `${clienteNombre} no ha llevado nada que coincida con "${texto}".`
-              : "Prueba con menos palabras o quita el rango de fechas."}
-          </div>
-        )}
-
-        {res && res.lineas_count > 0 && (
-          <>
-            <div className="p-2.5 rounded-lg bg-emerald-50 text-sm text-emerald-800 mb-3">
-              {clienteNombre ? "Si lo ha llevado: " : "Encontrado: "}
-              <b className="font-medium">{money(res.unidades)} unidades</b> en{" "}
-              <b className="font-medium">{res.notas} notas</b>
-              {res.primera_fecha && res.ultima_fecha && (
-                <> , entre {res.primera_fecha} y {res.ultima_fecha}</>
-              )}
-              {res.ultimo_precio != null && (
-                <>. Ultimo precio <b className="font-medium">${money(res.ultimo_precio)}</b></>
-              )}
-              . Total <b className="font-medium">${money(res.total_usd)}</b>
-            </div>
-
-            {res.por_mes.length > 1 && (
-              <div className="flex gap-1 items-end h-14 mb-4">
-                {res.por_mes.map((m) => (
-                  <div key={m.mes} className="flex-1 text-center group relative">
-                    <div
-                      className="bg-violet-300 group-hover:bg-violet-500 rounded-t transition-colors"
-                      style={{
-                        height: `${maxMes > 0 ? (m.unidades / maxMes) * 40 : 0}px`,
-                        minHeight: "2px",
-                      }}
-                    />
-                    <div className="text-[9.5px] text-gray-400 mt-1">
-                      {MESES_CORTOS[Number(m.mes.slice(5, 7)) - 1]}
-                    </div>
-                    <div className="hidden group-hover:block absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10">
-                      {money(m.unidades)} uds · ${money(m.total)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex gap-2.5 px-1 py-1.5 border-b border-gray-100 text-[10.5px] text-gray-400">
-              <span className="w-14">fecha</span>
-              <span className="w-8">nota</span>
-              {!clienteId && <span className="w-28">cliente</span>}
-              <span className="flex-1 min-w-0">producto</span>
-              <span className="w-10 text-right">cant</span>
-              <span className="w-14 text-right">precio $</span>
-              <span className="w-14 text-right">total $</span>
-            </div>
-            {res.lineas.map((l, i) => (
-              <div
-                key={`${l.note_id}-${i}`}
-                className="flex gap-2.5 px-1 py-1.5 border-b border-gray-50 text-[12.5px]"
-              >
-                <span className="w-14 text-gray-500">{l.note_date}</span>
-                <Link
-                  href={`/notas/nueva?id=${l.note_id}`}
-                  className="w-8 text-indigo-600 hover:underline font-mono text-[10.5px]"
-                >
-                  {l.sequence_number}
-                </Link>
-                {!clienteId && (
-                  <span className="w-28 truncate text-gray-600">{l.display_name}</span>
-                )}
-                <span className="flex-1 min-w-0 truncate" title={l.description}>
-                  {l.description}
-                </span>
-                <span className="w-10 text-right">{money(l.quantity)}</span>
-                <span className="w-14 text-right">{money(l.unit_price)}</span>
-                <span className="w-14 text-right">{money(l.line_total)}</span>
-              </div>
-            ))}
-
-            <p className="text-[11px] text-gray-400 mt-3">
-              Todos los precios en dolares, sin importar en que moneda se hizo cada nota.
-            </p>
-          </>
-        )}
-      </div>
-    </div>
+    <Suspense fallback={<p className="text-sm text-gray-400 p-8">Cargando...</p>}>
+      <NuevaNotaInner />
+    </Suspense>
   );
 }
