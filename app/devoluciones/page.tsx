@@ -2,7 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  Boxes,
+  FileSpreadsheet,
+  ListChecks,
+  PackageCheck,
+  PackageX,
+  Printer,
+  Tags,
+  Truck,
+  Undo2,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { EmptyState, Pill, SkeletonRows, ToolbarButton, ToolbarSeparator, notify, type PillTone } from "@/components/ui";
+import { Barra, Campo, Encabezado, Segmento, Tarjeta, descargarExcel } from "@/components/Ventana";
 
 type PorMes = {
   mes: string;
@@ -67,10 +81,10 @@ const MESES_CORTOS = [
   "jul", "ago", "sep", "oct", "nov", "dic",
 ];
 
-const DESTINOS: Record<string, { l: string; c: string }> = {
-  ALMACEN: { l: "volvio al almacen", c: "bg-emerald-50 text-emerald-800" },
-  PROVEEDOR: { l: "al proveedor", c: "bg-violet-50 text-violet-800" },
-  PERDIDA: { l: "perdida", c: "bg-red-50 text-red-800" },
+const DESTINOS: Record<string, { l: string; tone: PillTone }> = {
+  ALMACEN: { l: "volvio al almacen", tone: "success" },
+  PROVEEDOR: { l: "al proveedor", tone: "violet" },
+  PERDIDA: { l: "perdida", tone: "danger" },
 };
 
 function money(n: number) {
@@ -81,10 +95,18 @@ function money(n: number) {
 }
 
 function anioIso(a: number, m: number, d: number) {
-  return new Date(a, m, d).toISOString().slice(0, 10);
+  const mm = String(m + 1).padStart(2, "0");
+  const dd = String(d).padStart(2, "0");
+  return `${a}-${mm}-${dd}`;
+}
+
+function fechaCorta(iso: string) {
+  const d = new Date(iso.slice(0, 10) + "T00:00:00");
+  return d.toLocaleDateString("es-VE", { day: "2-digit", month: "short", year: "2-digit" });
 }
 
 export default function DevolucionesPage() {
+  const router = useRouter();
   const hoy = new Date();
   const [from, setFrom] = useState(anioIso(hoy.getFullYear(), 0, 1));
   const [to, setTo] = useState(hoy.toISOString().slice(0, 10));
@@ -117,128 +139,167 @@ export default function DevolucionesPage() {
     return Math.max(...rep.por_mes.map((m) => m.total));
   }, [rep]);
 
+  const esteAnio = hoy.getFullYear();
+  const periodo =
+    from === anioIso(esteAnio, 0, 1) ? "este" : from === anioIso(esteAnio - 1, 0, 1) && to === anioIso(esteAnio - 1, 11, 31) ? "pasado" : "";
+
   function anio(delta: number) {
-    const a = hoy.getFullYear() + delta;
+    const a = esteAnio + delta;
     setFrom(anioIso(a, 0, 1));
-    setTo(anioIso(a, 11, 31));
+    setTo(delta === 0 ? hoy.toISOString().slice(0, 10) : anioIso(a, 11, 31));
+  }
+
+  function exportar() {
+    if (!rep) return;
+    if (tab === "productos") {
+      descargarExcel(
+        "devoluciones-por-producto",
+        ["Codigo", "Descripcion", "Veces", "Unidades", "Monto", "Motivo principal"],
+        rep.por_producto.map((p) => [p.code, p.description, p.veces, p.unidades, money(p.monto), p.motivo_principal ?? ""])
+      );
+    } else if (tab === "motivos") {
+      descargarExcel(
+        "devoluciones-por-motivo",
+        ["Motivo", "Veces", "Unidades", "Monto"],
+        rep.por_motivo.map((m) => [m.reason, m.veces, m.unidades, money(m.monto)])
+      );
+    } else {
+      descargarExcel(
+        "devoluciones-detalle",
+        ["Fecha", "Nota", "Cliente", "Codigo", "Producto", "Cantidad", "Monto", "Motivo", "Destino", "Observacion"],
+        rep.detalle.map((d) => [
+          d.return_date,
+          d.sequence_number,
+          d.display_name,
+          d.code,
+          d.description,
+          d.quantity,
+          money(d.line_total),
+          d.reason,
+          DESTINOS[d.destination]?.l ?? d.destination,
+          d.observation ?? "",
+        ])
+      );
+    }
+    notify.ok("Archivo descargado");
   }
 
   return (
-    <main className="p-8 max-w-5xl print:p-0">
-      <div className="flex items-end justify-between mb-5 print:hidden">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Devoluciones</h1>
-          <p className="text-sm text-gray-500">
-            Cuanto vuelve, por que, y cuanto se pierde de verdad
-          </p>
-        </div>
-        <button
-          onClick={() => window.print()}
-          className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          Imprimir
-        </button>
-      </div>
+    <main className="p-6 max-w-[1180px] print:p-0">
+      <Encabezado titulo="Devoluciones">Cuanto vuelve, por que, y cuanto se pierde de verdad</Encabezado>
 
-      <div className="flex flex-wrap items-end gap-3 mb-5 print:hidden">
-        <div>
-          <label className="block text-[11px] text-gray-500 mb-1">Desde</label>
+      <Barra>
+        <ToolbarButton
+          icon={Undo2}
+          label="registrar"
+          tone="brand"
+          onClick={() => {
+            notify.info("Las devoluciones se registran desde la nota", "Marca la nota en la lista y dale al boton devolver.");
+            router.push("/notas");
+          }}
+        />
+        <ToolbarSeparator />
+        <ToolbarButton icon={Boxes} label="por producto" active={tab === "productos"} onClick={() => setTab("productos")} />
+        <ToolbarButton icon={Tags} label="por motivo" active={tab === "motivos"} onClick={() => setTab("motivos")} />
+        <ToolbarButton icon={ListChecks} label="detalle" active={tab === "detalle"} onClick={() => setTab("detalle")} />
+        <ToolbarSeparator />
+        <ToolbarButton icon={FileSpreadsheet} label="excel" onClick={exportar} />
+        <ToolbarButton icon={Printer} label="imprimir" onClick={() => window.print()} />
+      </Barra>
+
+      <div className="flex flex-wrap items-end gap-3 mb-4 print:hidden">
+        <Campo label="Desde">
           <input
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="h-9 px-2.5 border border-gray-300 rounded-lg text-sm"
+            className="h-9 px-2.5 border border-gray-300 rounded-lg text-sm bg-white"
           />
-        </div>
-        <div>
-          <label className="block text-[11px] text-gray-500 mb-1">Hasta</label>
+        </Campo>
+        <Campo label="Hasta">
           <input
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="h-9 px-2.5 border border-gray-300 rounded-lg text-sm"
+            className="h-9 px-2.5 border border-gray-300 rounded-lg text-sm bg-white"
+          />
+        </Campo>
+        <div className="pb-0.5">
+          <Segmento
+            valor={periodo}
+            onChange={(k) => anio(k === "este" ? 0 : -1)}
+            opciones={[
+              { k: "este", l: "este año" },
+              { k: "pasado", l: "año pasado" },
+            ]}
           />
         </div>
-        <button
-          onClick={() => anio(0)}
-          className="px-2.5 h-9 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50"
-        >
-          este año
-        </button>
-        <button
-          onClick={() => anio(-1)}
-          className="px-2.5 h-9 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50"
-        >
-          año pasado
-        </button>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
-          {error}
-        </div>
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
       )}
 
-      {cargando && <p className="text-sm text-gray-400">Cargando...</p>}
+      {cargando && !rep && <SkeletonRows rows={6} />}
 
       {rep && rep.lineas === 0 && (
-        <div className="p-8 text-center bg-white border border-gray-200 rounded-xl">
-          <p className="text-sm text-gray-700 mb-1">
-            No hay devoluciones registradas en este periodo.
-          </p>
-          <p className="text-xs text-gray-500">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-card">
+          <EmptyState icon={Undo2} title="No hay devoluciones en este periodo">
             Para registrar una, entra a{" "}
-            <Link href="/notas" className="text-indigo-600 hover:underline">
+            <Link href="/notas" className="text-brand-700 hover:underline">
               Notas
             </Link>
-            , pasa el cursor sobre la nota y dale a &quot;devolver&quot;.
-          </p>
+            , marca la nota y dale a &quot;devolver&quot;.
+          </EmptyState>
         </div>
       )}
 
       {rep && rep.lineas > 0 && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            <Card
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <Tarjeta
               label="Devoluciones"
               valor={String(rep.devoluciones)}
               sub={`${rep.unidades} unidades`}
-              borde="border-t-gray-400"
+              icono={Undo2}
+              acento="bg-gray-100 text-gray-600"
             />
-            <Card
+            <Tarjeta
               label="Monto devuelto"
               valor={`$${money(rep.monto_devuelto)}`}
               sub={`${rep.porcentaje}% de tus ventas`}
-              borde="border-t-orange-500"
+              icono={Undo2}
+              acento="bg-orange-50 text-orange-600"
             />
-            <Card
+            <Tarjeta
               label="Volvio al almacen"
               valor={`$${money(rep.volvio_almacen)}`}
               sub="se vuelve a vender"
               tono="text-emerald-700"
-              borde="border-t-emerald-500"
+              icono={PackageCheck}
+              acento="bg-emerald-50 text-emerald-700"
             />
-            <Card
+            <Tarjeta
               label="Perdida real"
               valor={`$${money(rep.perdida_real)}`}
               sub="dañado, no recuperado"
               tono="text-red-600"
-              borde="border-t-red-500"
+              icono={PackageX}
+              acento="bg-red-50 text-red-600"
             />
           </div>
 
           {rep.devuelto_proveedor > 0 && (
-            <div className="mb-5 p-3 rounded-xl bg-violet-50 border border-violet-100 text-[13px] text-violet-900">
-              ${money(rep.devuelto_proveedor)} en mercancia devuelta a proveedores —
-              revisa que te la hayan repuesto o acreditado.
+            <div className="mb-4 p-3 rounded-xl bg-violet-50 border border-violet-100 text-[13px] text-violet-900 flex items-center gap-2">
+              <Truck size={16} />
+              ${money(rep.devuelto_proveedor)} en mercancia devuelta a proveedores — revisa que te la hayan
+              repuesto o acreditado.
             </div>
           )}
 
           {rep.por_mes.length > 0 && (
-            <div className="mb-6 p-4 rounded-xl bg-white border border-gray-200">
-              <p className="text-xs text-gray-500 mb-3">
-                Cuando te las devolvieron, y de que mes venian
-              </p>
+            <div className="mb-4 p-4 rounded-xl bg-white border border-gray-200 shadow-card">
+              <p className="text-xs text-gray-500 mb-3">Cuando te las devolvieron, y de que mes venian</p>
               <div className="flex items-end gap-1.5 h-24">
                 {rep.por_mes.map((m) => {
                   const hMismo = maxMes > 0 ? (m.mismo_mes / maxMes) * 80 : 0;
@@ -251,15 +312,11 @@ export default function DevolucionesPage() {
                       />
                       <div
                         className="bg-orange-600"
-                        style={{
-                          height: `${hViejo}px`,
-                          minHeight: m.meses_anteriores > 0 ? 2 : 0,
-                        }}
+                        style={{ height: `${hViejo}px`, minHeight: m.meses_anteriores > 0 ? 2 : 0 }}
                       />
                       <div className="hidden group-hover:block absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10">
                         {m.mes} · ${money(m.total)}
-                        {m.meses_anteriores > 0 &&
-                          ` · $${money(m.meses_anteriores)} de meses viejos`}
+                        {m.meses_anteriores > 0 && ` · $${money(m.meses_anteriores)} de meses viejos`}
                       </div>
                     </div>
                   );
@@ -267,10 +324,7 @@ export default function DevolucionesPage() {
               </div>
               <div className="flex gap-1.5 mt-1">
                 {rep.por_mes.map((m) => (
-                  <div
-                    key={m.mes}
-                    className="flex-1 text-center text-[9.5px] text-gray-400"
-                  >
+                  <div key={m.mes} className="flex-1 text-center text-[9.5px] text-gray-400">
                     {MESES_CORTOS[Number(m.mes.slice(5, 7)) - 1]}
                   </div>
                 ))}
@@ -288,54 +342,31 @@ export default function DevolucionesPage() {
             </div>
           )}
 
-          <div className="flex gap-2 mb-3 print:hidden">
-            {[
-              { k: "productos", l: `Por producto (${rep.por_producto.length})` },
-              { k: "motivos", l: `Por motivo (${rep.por_motivo.length})` },
-              { k: "detalle", l: `Detalle (${rep.detalle.length})` },
-            ].map((t) => (
-              <button
-                key={t.k}
-                onClick={() => setTab(t.k as typeof tab)}
-                className={`px-3 py-1.5 rounded-lg text-sm ${
-                  tab === t.k
-                    ? "bg-gray-900 text-white"
-                    : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                {t.l}
-              </button>
-            ))}
-          </div>
-
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-card overflow-hidden">
             {tab === "productos" && (
               <>
-                <div className="flex gap-3 px-4 py-2 border-b border-gray-100 text-[10.5px] text-gray-400">
+                <Titulo>Por producto ({rep.por_producto.length})</Titulo>
+                <div className="flex gap-3 px-4 py-1.5 border-y border-gray-100 text-[10.5px] uppercase tracking-wide text-gray-400">
                   <span className="flex-1">producto</span>
                   <span className="w-12 text-right">veces</span>
-                  <span className="w-14 text-right">unidades</span>
-                  <span className="w-20 text-right">monto</span>
-                  <span className="w-36">motivo principal</span>
+                  <span className="w-16 text-right">unidades</span>
+                  <span className="w-24 text-right">monto</span>
+                  <span className="w-40">motivo principal</span>
                 </div>
-                {rep.por_producto.map((p) => (
+                {rep.por_producto.map((p, i) => (
                   <div
                     key={p.code}
-                    className="flex gap-3 px-4 py-2.5 border-b border-gray-50 text-[13px]"
+                    className={`flex gap-3 items-center px-4 h-10 border-b border-gray-50 text-[13px] ${i % 2 ? "bg-gray-50/40" : ""}`}
                   >
                     <span className="flex-1 min-w-0 truncate">
-                      <span className="text-gray-400 font-mono text-[10.5px] mr-1.5">
-                        {p.code}
-                      </span>
+                      <span className="text-gray-400 font-mono text-[10.5px] mr-1.5">{p.code}</span>
                       {p.description}
                     </span>
                     <span className="w-12 text-right">{p.veces}</span>
-                    <span className="w-14 text-right text-gray-500">{p.unidades}</span>
-                    <span className="w-20 text-right">${money(p.monto)}</span>
-                    <span className="w-36">
-                      <span className="text-[10.5px] px-1.5 py-[1px] rounded-full bg-gray-100 text-gray-700">
-                        {p.motivo_principal ?? "sin motivo"}
-                      </span>
+                    <span className="w-16 text-right text-gray-500">{p.unidades}</span>
+                    <span className="w-24 text-right">${money(p.monto)}</span>
+                    <span className="w-40 truncate">
+                      <Pill tone="neutral">{p.motivo_principal ?? "sin motivo"}</Pill>
                     </span>
                   </div>
                 ))}
@@ -344,35 +375,30 @@ export default function DevolucionesPage() {
 
             {tab === "motivos" && (
               <>
-                <div className="flex gap-3 px-4 py-2 border-b border-gray-100 text-[10.5px] text-gray-400">
+                <Titulo>Por motivo ({rep.por_motivo.length})</Titulo>
+                <div className="flex gap-3 px-4 py-1.5 border-y border-gray-100 text-[10.5px] uppercase tracking-wide text-gray-400">
                   <span className="flex-1">motivo</span>
                   <span className="w-12 text-right">veces</span>
-                  <span className="w-14 text-right">unidades</span>
-                  <span className="w-20 text-right">monto</span>
-                  <span className="w-28">peso</span>
+                  <span className="w-16 text-right">unidades</span>
+                  <span className="w-24 text-right">monto</span>
+                  <span className="w-32">peso</span>
                 </div>
-                {rep.por_motivo.map((m) => {
-                  const pct =
-                    rep.monto_devuelto > 0 ? (m.monto / rep.monto_devuelto) * 100 : 0;
+                {rep.por_motivo.map((m, i) => {
+                  const pct = rep.monto_devuelto > 0 ? (m.monto / rep.monto_devuelto) * 100 : 0;
                   return (
                     <div
                       key={m.reason}
-                      className="flex gap-3 px-4 py-2.5 border-b border-gray-50 text-[13px] items-center"
+                      className={`flex gap-3 items-center px-4 h-10 border-b border-gray-50 text-[13px] ${i % 2 ? "bg-gray-50/40" : ""}`}
                     >
                       <span className="flex-1 min-w-0 truncate">{m.reason}</span>
                       <span className="w-12 text-right">{m.veces}</span>
-                      <span className="w-14 text-right text-gray-500">{m.unidades}</span>
-                      <span className="w-20 text-right">${money(m.monto)}</span>
-                      <span className="w-28 flex items-center gap-2">
+                      <span className="w-16 text-right text-gray-500">{m.unidades}</span>
+                      <span className="w-24 text-right">${money(m.monto)}</span>
+                      <span className="w-32 flex items-center gap-2">
                         <span className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <span
-                            className="block h-full bg-orange-400"
-                            style={{ width: `${pct}%` }}
-                          />
+                          <span className="block h-full bg-orange-400" style={{ width: `${pct}%` }} />
                         </span>
-                        <span className="text-[10.5px] text-gray-400">
-                          {pct.toFixed(0)}%
-                        </span>
+                        <span className="text-[10.5px] text-gray-400 w-8 text-right">{pct.toFixed(0)}%</span>
                       </span>
                     </div>
                   );
@@ -382,46 +408,44 @@ export default function DevolucionesPage() {
 
             {tab === "detalle" && (
               <>
-                <div className="flex gap-3 px-4 py-2 border-b border-gray-100 text-[10.5px] text-gray-400">
-                  <span className="w-16">fecha</span>
+                <Titulo>Detalle ({rep.detalle.length})</Titulo>
+                <div className="flex gap-3 px-4 py-1.5 border-y border-gray-100 text-[10.5px] uppercase tracking-wide text-gray-400">
+                  <span className="w-20">fecha</span>
                   <span className="w-12">nota</span>
-                  <span className="w-28">cliente</span>
+                  <span className="w-32">cliente</span>
                   <span className="flex-1">producto</span>
                   <span className="w-10 text-right">cant</span>
-                  <span className="w-16 text-right">monto</span>
-                  <span className="w-28">destino</span>
+                  <span className="w-20 text-right">monto</span>
+                  <span className="w-32">destino</span>
                 </div>
-                {rep.detalle.map((d, i) => (
-                  <div
-                    key={`${d.return_id}-${i}`}
-                    className="flex gap-3 px-4 py-2 border-b border-gray-50 text-[12.5px]"
-                    title={d.observation ?? ""}
-                  >
-                    <span className="w-16 text-gray-500">{d.return_date.slice(5)}</span>
-                    <Link
-                      href={`/notas/nueva?id=${d.note_id}`}
-                      className="w-12 text-indigo-600 hover:underline font-mono text-[10.5px]"
+                {rep.detalle.map((d, i) => {
+                  const dst = DESTINOS[d.destination] ?? { l: d.destination, tone: "neutral" as PillTone };
+                  return (
+                    <div
+                      key={`${d.return_id}-${i}`}
+                      className={`flex gap-3 items-center px-4 h-10 border-b border-gray-50 text-[12.5px] ${i % 2 ? "bg-gray-50/40" : ""}`}
+                      title={d.observation ?? ""}
                     >
-                      {d.sequence_number}
-                    </Link>
-                    <span className="w-28 truncate text-gray-600">{d.display_name}</span>
-                    <span className="flex-1 min-w-0 truncate">
-                      {d.description}
-                      <span className="text-gray-400 ml-1.5">· {d.reason}</span>
-                    </span>
-                    <span className="w-10 text-right">{d.quantity}</span>
-                    <span className="w-16 text-right">${money(d.line_total)}</span>
-                    <span className="w-28">
-                      <span
-                        className={`text-[10px] px-1.5 py-[1px] rounded-full ${
-                          DESTINOS[d.destination]?.c ?? "bg-gray-100 text-gray-700"
-                        }`}
+                      <span className="w-20 text-gray-500">{fechaCorta(d.return_date)}</span>
+                      <Link
+                        href={`/notas/nueva?id=${d.note_id}`}
+                        className="w-12 text-brand-700 hover:underline font-mono text-[11px]"
                       >
-                        {DESTINOS[d.destination]?.l ?? d.destination}
+                        {d.sequence_number}
+                      </Link>
+                      <span className="w-32 truncate text-gray-600">{d.display_name}</span>
+                      <span className="flex-1 min-w-0 truncate">
+                        {d.description}
+                        <span className="text-gray-400 ml-1.5">· {d.reason}</span>
                       </span>
-                    </span>
-                  </div>
-                ))}
+                      <span className="w-10 text-right">{d.quantity}</span>
+                      <span className="w-20 text-right">${money(d.line_total)}</span>
+                      <span className="w-32">
+                        <Pill tone={dst.tone}>{dst.l}</Pill>
+                      </span>
+                    </div>
+                  );
+                })}
               </>
             )}
           </div>
@@ -431,28 +455,6 @@ export default function DevolucionesPage() {
   );
 }
 
-function Card({
-  label,
-  valor,
-  sub,
-  tono,
-  borde,
-}: {
-  label: string;
-  valor: string;
-  sub?: string;
-  tono?: string;
-  borde?: string;
-}) {
-  return (
-    <div
-      className={`p-4 rounded-xl bg-white border border-gray-200 border-t-2 ${
-        borde ?? "border-t-gray-400"
-      }`}
-    >
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`text-2xl font-semibold ${tono ?? "text-gray-900"}`}>{valor}</p>
-      {sub && <p className="text-[11px] text-gray-400">{sub}</p>}
-    </div>
-  );
+function Titulo({ children }: { children: React.ReactNode }) {
+  return <div className="px-4 pt-3 pb-2 text-[13px] font-medium text-gray-800">{children}</div>;
 }
