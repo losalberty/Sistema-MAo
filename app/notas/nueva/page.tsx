@@ -7,6 +7,7 @@ import { Check, CircleDot, Eye, FilePlus2, Save } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import ProductPicker, { PickerProduct } from "@/components/ProductPicker";
 import { NumInput, notify } from "@/components/ui";
+import { tasaPara, useTasas } from "@/components/Tasas";
 
 type ClientRow = {
   id: string;
@@ -167,6 +168,19 @@ function NuevaNotaInner() {
   const totalCost = items.reduce((s, i) => s + (i.cost_snapshot || 0) * i.quantity, 0);
   const profit = total - totalCost;
   const margin = total > 0 ? (profit / total) * 100 : 0;
+
+  // tasas del dia guardadas abajo a la izquierda del menu
+  const tasas = useTasas();
+  const tasaHoy = tasaPara(currencyMode, tasas);
+
+  // al cambiar la moneda se pone sola la tasa de hoy de esa moneda
+  function elegirMoneda(k: CurrencyMode) {
+    setCurrencyMode(k);
+    if (k === "USD") return;
+    const t = tasaPara(k, tasas);
+    if (t > 0) setExchangeRate(t);
+    else if (k !== currencyMode) setExchangeRate(0);
+  }
 
   const effectiveRate =
     currencyMode === "BS_BCV" ? exchangeRate * (1 + gapPercent / 100) : exchangeRate;
@@ -1066,7 +1080,7 @@ function NuevaNotaInner() {
                 type="button"
                 role="radio"
                 aria-checked={on}
-                onClick={() => setCurrencyMode(m.k)}
+                onClick={() => elegirMoneda(m.k)}
                 className={`rounded-lg px-2 py-1.5 text-center transition-colors ${
                   on
                     ? "bg-white shadow-card ring-1 ring-brand-200 text-brand-800"
@@ -1088,8 +1102,20 @@ function NuevaNotaInner() {
         {isForeign && (
           <div className="flex gap-2">
             <div className="flex-1">
-              <label className="text-xs text-gray-500 block mb-1">
+              <label className="text-xs text-gray-500 mb-1 flex items-center gap-2">
                 Tasa del dia ({curLabel} por USD)
+                {tasaHoy > 0 && exchangeRate === tasaHoy && (
+                  <span className="text-[10.5px] text-emerald-700">es la de hoy</span>
+                )}
+                {tasaHoy > 0 && exchangeRate !== tasaHoy && (
+                  <button
+                    type="button"
+                    onClick={() => setExchangeRate(tasaHoy)}
+                    className="text-[10.5px] text-brand-700 hover:underline"
+                  >
+                    usar la de hoy ({tasaHoy.toLocaleString("es-VE")})
+                  </button>
+                )}
               </label>
               <NumInput
                 className={`w-full border rounded-md px-3 py-2 text-sm ${
