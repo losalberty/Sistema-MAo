@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   FileSpreadsheet,
@@ -154,7 +155,18 @@ function m2(n: number | null | undefined) {
   return n == null ? "—" : `$${Number(n).toFixed(2)}`;
 }
 
+// la pagina va envuelta en Suspense porque lee la direccion (?buscar=... desde el buscador)
 export default function ProductosPage() {
+  return (
+    <Suspense fallback={null}>
+      <Productos />
+    </Suspense>
+  );
+}
+
+function Productos() {
+  const router = useRouter();
+  const params = useSearchParams();
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -212,6 +224,14 @@ export default function ProductosPage() {
     load(search.trim(), listFilter, catFilter);
     loadLists();
   }, [load, loadLists, search, listFilter, catFilter]);
+
+  // el buscador universal (Ctrl + K) llega aqui con ?buscar=CODIGO
+  useEffect(() => {
+    const b = params.get("buscar");
+    if (!b) return;
+    setSearch(b);
+    router.replace("/productos");
+  }, [params, router]);
 
   // espera a que termines de escribir antes de buscar
   const primera = useRef(true);
