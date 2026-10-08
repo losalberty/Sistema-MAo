@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   FileSpreadsheet,
   FileText,
@@ -124,8 +124,18 @@ function telWhatsapp(tel: string | null) {
   return t;
 }
 
+// la pagina va envuelta en Suspense porque lee la direccion (?id=... desde el buscador)
 export default function ClientesPage() {
+  return (
+    <Suspense fallback={null}>
+      <Clientes />
+    </Suspense>
+  );
+}
+
+function Clientes() {
   const router = useRouter();
+  const params = useSearchParams();
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -148,6 +158,19 @@ export default function ClientesPage() {
     setError(null);
     setClients((data ?? []) as ClientRow[]);
   }, []);
+
+  // el buscador universal (Ctrl + K) llega aqui con ?id=... o ?nuevo=1
+  useEffect(() => {
+    const id = params.get("id");
+    const nuevo = params.get("nuevo");
+    if (!id && !nuevo) return;
+    if (id) {
+      setMarcado(id);
+      setFichaId(id);
+    }
+    if (nuevo) setForm({ cliente: null });
+    router.replace("/clientes");
+  }, [params, router]);
 
   // espera a que termines de escribir antes de buscar
   useEffect(() => {
