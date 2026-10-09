@@ -32,14 +32,16 @@ import {
   Undo2,
   Wallet,
   X,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import ClientePicker, { type ClienteHit } from "@/components/ClientePicker";
+import { type ClienteHit } from "@/components/ClientePicker";
 import { EmptyState, NumInput, Pill, SkeletonRows, confirmar, notify, type PillTone } from "@/components/ui";
 import { descargarExcel } from "@/components/Ventana";
 import { colorDe, iniciales } from "@/components/Paleta";
 import { tasaPara, useTasas } from "@/components/Tasas";
+import { useAlClicFuera } from "@/components/useFuera";
 
 type NoteRow = {
   id: string;
@@ -244,6 +246,9 @@ function Notas() {
   const [vista, setVista] = useState<Vista>("TODAS");
   const [monedas, setMonedas] = useState<Set<string>>(new Set());
   const [verMonedas, setVerMonedas] = useState(false);
+  const cajaMonedas = useRef<HTMLDivElement>(null);
+  const cerrarMonedas = useCallback(() => setVerMonedas(false), []);
+  useAlClicFuera(cajaMonedas, verMonedas, cerrarMonedas);
   const [orden, setOrden] = useState<Orden>({ k: "fecha", dir: -1 });
   const [verGanancia, setVerGanancia] = useState(false);
 
@@ -675,7 +680,7 @@ function Notas() {
             </div>
 
             {/* filtro de moneda */}
-            <div className="relative">
+            <div className="relative" ref={cajaMonedas}>
               <button
                 onClick={() => setVerMonedas((v) => !v)}
                 className={`h-8 px-2.5 rounded-lg inline-flex items-center gap-1.5 text-[12.5px] border ${
@@ -690,7 +695,6 @@ function Notas() {
               </button>
               {verMonedas && (
                 <>
-                  <div className="fixed inset-0 z-20" onMouseDown={() => setVerMonedas(false)} />
                   <div className="absolute left-0 top-9 z-30 w-52 rounded-xl bg-white border border-gray-200 shadow-pop p-1.5">
                     {MONEDAS.map((m) => {
                       const on = monedas.has(m.key);
@@ -953,6 +957,10 @@ function Notas() {
 
       {hover && hoverNote && !panel && totals.selCount === 0 && <CuadroRapido n={hoverNote} rect={hover.rect} />}
 
+      {showBuscar && (
+        <BusquedaModal onClose={() => setShowBuscar(false)} onAbrirNota={(id) => setPanel({ id, abonar: false })} />
+      )}
+
       {panel && (
         <PanelNota
           key={panel.id + (panel.abonar ? "-a" : "")}
@@ -979,7 +987,6 @@ function Notas() {
         />
       )}
 
-      {showBuscar && <BusquedaModal onClose={() => setShowBuscar(false)} />}
     </main>
   );
 }
@@ -1155,6 +1162,10 @@ function PanelNota({
   const [abonando, setAbonando] = useState(abonarAlAbrir);
   const [verRentab, setVerRentab] = useState(false);
   const [verMas, setVerMas] = useState(false);
+  const raizPanel = useRef<HTMLDivElement>(null);
+  const cajaMas = useRef<HTMLDivElement>(null);
+  const cerrarMas = useCallback(() => setVerMas(false), []);
+  useAlClicFuera(cajaMas, verMas, cerrarMas);
 
   const cargar = useCallback(async () => {
     const { data, error } = await supabase.rpc("get_note_panel", { p_note_id: noteId });
@@ -1177,8 +1188,11 @@ function PanelNota({
   useEffect(() => {
     function tecla(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
-      // si hay una confirmacion abierta encima, que esa se cierre primero
-      if (document.querySelectorAll('[role="dialog"][aria-modal="true"]:not([aria-hidden="true"] *)').length > 1) return;
+      // si hay otra ventana encima (una confirmacion), que esa se cierre primero
+      const abiertos = Array.from(
+        document.querySelectorAll('[role="dialog"][aria-modal="true"]:not([aria-hidden="true"] *)')
+      );
+      if (abiertos[abiertos.length - 1] !== raizPanel.current) return;
       cerrar();
     }
     document.addEventListener("keydown", tecla);
@@ -1275,7 +1289,7 @@ function PanelNota({
   const CIRC = 2 * Math.PI * RADIO;
 
   return (
-    <div className="fixed inset-0 z-50 print:hidden" role="dialog" aria-modal="true" aria-label="Nota">
+    <div ref={raizPanel} className="fixed inset-0 z-50 print:hidden" role="dialog" aria-modal="true" aria-label="Nota">
       <div
         className={`absolute inset-0 bg-gray-950/30 backdrop-blur-[1.5px] transition-opacity duration-200 ${
           abierto ? "opacity-100" : "opacity-0"
@@ -1476,7 +1490,7 @@ function PanelNota({
                 <BotonSec icon={MessageCircle} label="WhatsApp" onClick={() => abrirWhatsapp(p)} />
                 <BotonSec icon={Printer} label="Imprimir" onClick={() => onVer(p.id)} />
                 <BotonSec icon={Pencil} label="Editar" onClick={() => onEditar(p.id)} />
-                <div className="relative">
+                <div className="relative" ref={cajaMas}>
                   <button
                     onClick={() => setVerMas((v) => !v)}
                     title="Mas acciones"
@@ -1486,7 +1500,6 @@ function PanelNota({
                   </button>
                   {verMas && (
                     <>
-                      <div className="fixed inset-0 z-10" onMouseDown={() => setVerMas(false)} />
                       <div className="absolute right-0 top-10 z-20 w-52 rounded-xl bg-white border border-gray-200 shadow-pop p-1.5">
                         {!anulada && (
                           <button
@@ -2365,38 +2378,122 @@ function Fila({ k, v, tone }: { k: string; v: string; tone?: string }) {
   );
 }
 
-/* ================= ventana de busqueda profunda ================= */
+/* ================= busqueda a fondo: ventana grande ================= */
 
-function BusquedaModal({ onClose }: { onClose: () => void }) {
+const RANGOS: { k: string; l: string }[] = [
+  { k: "todo", l: "Todo" },
+  { k: "anio", l: "Este año" },
+  { k: "3m", l: "3 meses" },
+  { k: "mes", l: "Este mes" },
+];
+
+function isoLocal(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function rangoFechas(k: string): { desde: string; hasta: string } {
+  const hoy = new Date();
+  if (k === "anio") return { desde: `${hoy.getFullYear()}-01-01`, hasta: isoLocal(hoy) };
+  if (k === "mes") return { desde: isoLocal(new Date(hoy.getFullYear(), hoy.getMonth(), 1)), hasta: isoLocal(hoy) };
+  if (k === "3m") {
+    const d = new Date(hoy);
+    d.setMonth(d.getMonth() - 3);
+    return { desde: isoLocal(d), hasta: isoLocal(hoy) };
+  }
+  return { desde: "", hasta: "" };
+}
+
+function BusquedaModal({ onClose, onAbrirNota }: { onClose: () => void; onAbrirNota: (id: string) => void }) {
+  const raiz = useRef<HTMLDivElement>(null);
   const [cliente, setCliente] = useState<ClienteHit | null>(null);
+  const [filtroCli, setFiltroCli] = useState("");
+  const [clientes, setClientes] = useState<ClienteHit[]>([]);
+  const [cargandoCli, setCargandoCli] = useState(true);
+  const [marcado, setMarcado] = useState(-1); // -1 = "Todos los clientes"
   const [texto, setTexto] = useState("");
+  const [rango, setRango] = useState("todo");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [res, setRes] = useState<Busqueda | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const lista = useRef<HTMLDivElement>(null);
+  const turno = useRef(0);
 
-  const clienteId = cliente?.id ?? "";
+  // lista de clientes a la izquierda (los que mas compran primero)
+  useEffect(() => {
+    setCargandoCli(true);
+    const t = setTimeout(async () => {
+      const { data } = await supabase.rpc("search_clients", { p_text: filtroCli.trim(), p_limit: 60 });
+      setClientes((data ?? []) as ClienteHit[]);
+      setCargandoCli(false);
+      setMarcado(-1);
+    }, 200);
+    return () => clearTimeout(t);
+  }, [filtroCli]);
 
-  async function buscar() {
-    setErr(null);
-    if (!clienteId && !texto.trim()) {
-      setErr("Elige un cliente o escribe un producto. Puedes usar solo uno de los dos.");
+  // se busca solo cada vez que cambias algo (sin boton)
+  useEffect(() => {
+    const prod = texto.trim();
+    if (!cliente && prod.length < 2) {
+      setRes(null);
+      setErr(null);
       return;
     }
+    const mio = ++turno.current;
     setBusy(true);
-    const { data, error } = await supabase.rpc("deep_search", {
-      p_client_id: clienteId || null,
-      p_text: texto.trim(),
-      p_from: desde || null,
-      p_to: hasta || null,
-    });
-    setBusy(false);
-    if (error) {
-      setErr(error.message);
-      return;
+    const t = setTimeout(async () => {
+      const { data, error } = await supabase.rpc("deep_search", {
+        p_client_id: cliente?.id ?? null,
+        p_text: prod,
+        p_from: desde || null,
+        p_to: hasta || null,
+      });
+      if (mio !== turno.current) return;
+      setBusy(false);
+      if (error) return setErr(error.message);
+      setErr(null);
+      setRes(data as Busqueda);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [cliente, texto, desde, hasta]);
+
+  // Esc cierra la ventana (si no hay otra encima)
+  useEffect(() => {
+    function tecla(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      const abiertos = Array.from(
+        document.querySelectorAll('[role="dialog"][aria-modal="true"]:not([aria-hidden="true"] *)')
+      );
+      if (abiertos[abiertos.length - 1] !== raiz.current) return;
+      onClose();
     }
-    setRes(data as Busqueda);
+    document.addEventListener("keydown", tecla);
+    return () => document.removeEventListener("keydown", tecla);
+  }, [onClose]);
+
+  useEffect(() => {
+    lista.current?.querySelector(`[data-i="${marcado}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [marcado]);
+
+  function teclaClientes(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setMarcado((m) => Math.min(m + 1, clientes.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setMarcado((m) => Math.max(m - 1, -1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      setCliente(marcado >= 0 ? clientes[marcado] ?? null : null);
+    }
+  }
+
+  function elegirRango(k: string) {
+    setRango(k);
+    const r = rangoFechas(k);
+    setDesde(r.desde);
+    setHasta(r.hasta);
   }
 
   const maxMes = useMemo(() => {
@@ -2404,162 +2501,270 @@ function BusquedaModal({ onClose }: { onClose: () => void }) {
     return Math.max(...res.por_mes.map((m) => m.unidades));
   }, [res]);
 
-  const clienteNombre = cliente?.name ?? "";
-
   return (
     <div
-      className="fixed inset-0 bg-black/45 flex items-center justify-center z-50 p-4"
-      onClick={onClose}
+      ref={raiz}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-[2px]"
+      onMouseDown={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Busqueda a fondo"
     >
       <div
-        className="bg-white rounded-xl w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-5xl h-[86vh] flex flex-col rounded-2xl bg-white shadow-pop border border-gray-200/80 overflow-hidden"
+        onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-base font-semibold text-gray-900">Busqueda profunda</h2>
-          <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-900">
-            cerrar
-          </button>
-        </div>
-        <p className="text-xs text-gray-500 mb-4">
-          Busca que le vendiste a quien. Puedes llenar uno solo de los dos campos.
-        </p>
-
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <div>
-            <label className="block text-[11px] text-gray-500 mb-1">Cliente</label>
-            <ClientePicker
-              value={cliente}
-              onChange={setCliente}
-              placeholder="Escribe el nombre, ej: repues"
-              autoFocus
-            />
+        {/* cabecera */}
+        <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100">
+          <span className="w-9 h-9 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center">
+            <ScanSearch size={18} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[16px] font-semibold text-gray-900">Busqueda a fondo</h2>
+            <p className="text-[12.5px] text-gray-500">
+              Que le vendiste a quien. Elige un cliente, escribe un producto, o las dos cosas.
+            </p>
           </div>
-          <div>
-            <label className="block text-[11px] text-gray-500 mb-1">
-              Producto: codigo o nombre
-            </label>
-            <input
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") buscar();
-              }}
-              placeholder="330REPOTEN o cruceta GUT-20"
-              className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-sm"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-2 items-center mb-4">
-          <span className="text-[11px] text-gray-400">desde</span>
-          <input
-            type="date"
-            value={desde}
-            onChange={(e) => setDesde(e.target.value)}
-            className="h-8 px-2 border border-gray-200 rounded-lg text-xs"
-          />
-          <span className="text-[11px] text-gray-400">hasta</span>
-          <input
-            type="date"
-            value={hasta}
-            onChange={(e) => setHasta(e.target.value)}
-            className="h-8 px-2 border border-gray-200 rounded-lg text-xs"
-          />
           <button
-            onClick={buscar}
-            disabled={busy}
-            className="ml-auto px-4 h-8 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-700 disabled:opacity-50"
+            onClick={onClose}
+            aria-label="Cerrar"
+            title="Cerrar (Esc)"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-gray-100"
           >
-            {busy ? "Buscando..." : "Buscar"}
+            <X size={17} />
           </button>
         </div>
 
-        {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
-
-        {res && res.lineas_count === 0 && (
-          <div className="p-3 rounded-lg bg-gray-50 text-sm text-gray-600">
-            No hay resultados. {clienteNombre && texto
-              ? `${clienteNombre} no ha llevado nada que coincida con "${texto}".`
-              : "Prueba con menos palabras o quita el rango de fechas."}
-          </div>
-        )}
-
-        {res && res.lineas_count > 0 && (
-          <>
-            <div className="p-2.5 rounded-lg bg-emerald-50 text-sm text-emerald-800 mb-3">
-              {clienteNombre ? "Si lo ha llevado: " : "Encontrado: "}
-              <b className="font-medium">{money(res.unidades)} unidades</b> en{" "}
-              <b className="font-medium">{res.notas} notas</b>
-              {res.primera_fecha && res.ultima_fecha && (
-                <> , entre {res.primera_fecha} y {res.ultima_fecha}</>
-              )}
-              {res.ultimo_precio != null && (
-                <>. Ultimo precio <b className="font-medium">${money(res.ultimo_precio)}</b></>
-              )}
-              . Total <b className="font-medium">${money(res.total_usd)}</b>
+        <div className="flex-1 min-h-0 grid grid-cols-[310px_1fr]">
+          {/* ---------- izquierda: que buscar ---------- */}
+          <div className="min-h-0 flex flex-col gap-3 p-4 border-r border-gray-100 bg-gray-50/50">
+            <div className="flex-1 min-h-0 flex flex-col">
+              <p className="text-[11.5px] font-medium text-gray-500 mb-1.5">Cliente</p>
+              <div className="relative mb-2">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  autoFocus
+                  value={filtroCli}
+                  onChange={(e) => setFiltroCli(e.target.value)}
+                  onKeyDown={teclaClientes}
+                  placeholder="Buscar cliente…"
+                  className="w-full h-9 pl-8 pr-2.5 border border-gray-300 rounded-lg text-[13px] bg-white focus:border-brand-500"
+                />
+              </div>
+              <div ref={lista} className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1">
+                <button
+                  data-i={-1}
+                  onClick={() => setCliente(null)}
+                  onMouseEnter={() => setMarcado(-1)}
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left ${
+                    !cliente ? "bg-brand-50 ring-1 ring-brand-200" : marcado === -1 ? "bg-gray-50" : ""
+                  }`}
+                >
+                  <span className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center shrink-0">
+                    <Users size={15} />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className={`block text-[13px] ${!cliente ? "text-brand-800 font-medium" : "text-gray-800"}`}>
+                      Todos los clientes
+                    </span>
+                    <span className="block text-[11.5px] text-gray-400">buscar el producto en todas las notas</span>
+                  </span>
+                  {!cliente && <Check size={15} className="text-brand-700 shrink-0" />}
+                </button>
+                <div className="h-px bg-gray-100 my-1" />
+                {cargandoCli && clientes.length === 0 && <p className="px-2.5 py-3 text-[12.5px] text-gray-400">Cargando…</p>}
+                {!cargandoCli && clientes.length === 0 && (
+                  <p className="px-2.5 py-3 text-[12.5px] text-gray-400">Ningun cliente coincide con “{filtroCli}”.</p>
+                )}
+                {clientes.map((c, i) => {
+                  const on = cliente?.id === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      data-i={i}
+                      onClick={() => setCliente(c)}
+                      onMouseEnter={() => setMarcado(i)}
+                      className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left ${
+                        on ? "bg-brand-50 ring-1 ring-brand-200" : marcado === i ? "bg-gray-50" : ""
+                      }`}
+                    >
+                      <span
+                        className="w-8 h-8 rounded-full text-white text-[11px] font-semibold flex items-center justify-center shrink-0"
+                        style={{ background: colorDe(c.name) }}
+                      >
+                        {iniciales(c.name)}
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className={`block text-[13px] truncate ${on ? "text-brand-800 font-medium" : "text-gray-800"}`}>
+                          {c.name}
+                        </span>
+                        <span className="block text-[11.5px] text-gray-400 truncate">
+                          {[c.city, `${c.notes_count} ${c.notes_count === 1 ? "nota" : "notas"}`].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                      {on && <Check size={15} className="text-brand-700 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            {res.por_mes.length > 1 && (
-              <div className="flex gap-1 items-end h-14 mb-4">
-                {res.por_mes.map((m) => (
-                  <div key={m.mes} className="flex-1 text-center group relative">
-                    <div
-                      className="bg-violet-300 group-hover:bg-violet-500 rounded-t transition-colors"
-                      style={{
-                        height: `${maxMes > 0 ? (m.unidades / maxMes) * 40 : 0}px`,
-                        minHeight: "2px",
-                      }}
-                    />
-                    <div className="text-[9.5px] text-gray-400 mt-1">
-                      {MESES_CORTOS[Number(m.mes.slice(5, 7)) - 1]}
-                    </div>
-                    <div className="hidden group-hover:block absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10">
-                      {money(m.unidades)} uds · ${money(m.total)}
-                    </div>
-                  </div>
+            <div>
+              <p className="text-[11.5px] font-medium text-gray-500 mb-1.5">Producto (codigo o nombre)</p>
+              <input
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                placeholder="ej: cruceta 1410, 2-2-G20…"
+                className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-[13px] bg-white focus:border-brand-500"
+              />
+            </div>
+
+            <div>
+              <p className="text-[11.5px] font-medium text-gray-500 mb-1.5">Fechas</p>
+              <div className="grid grid-cols-4 gap-1 p-1 rounded-lg bg-gray-100 mb-2">
+                {RANGOS.map((r) => (
+                  <button
+                    key={r.k}
+                    onClick={() => elegirRango(r.k)}
+                    className={`h-7 rounded-md text-[12px] ${
+                      rango === r.k ? "bg-white shadow-sm text-gray-900 font-medium" : "text-gray-500 hover:text-gray-800"
+                    }`}
+                  >
+                    {r.l}
+                  </button>
                 ))}
               </div>
-            )}
-
-            <div className="flex gap-2.5 px-1 py-1.5 border-b border-gray-100 text-[10.5px] text-gray-400">
-              <span className="w-14">fecha</span>
-              <span className="w-8">nota</span>
-              {!clienteId && <span className="w-28">cliente</span>}
-              <span className="flex-1 min-w-0">producto</span>
-              <span className="w-10 text-right">cant</span>
-              <span className="w-14 text-right">precio $</span>
-              <span className="w-14 text-right">total $</span>
-            </div>
-            {res.lineas.map((l, i) => (
-              <div
-                key={`${l.note_id}-${i}`}
-                className="flex gap-2.5 px-1 py-1.5 border-b border-gray-50 text-[12.5px]"
-              >
-                <span className="w-14 text-gray-500">{l.note_date}</span>
-                <Link
-                  href={`/notas/nueva?id=${l.note_id}`}
-                  className="w-8 text-indigo-600 hover:underline font-mono text-[10.5px]"
-                >
-                  {l.sequence_number}
-                </Link>
-                {!clienteId && (
-                  <span className="w-28 truncate text-gray-600">{l.display_name}</span>
-                )}
-                <span className="flex-1 min-w-0 truncate" title={l.description}>
-                  {l.description}
-                </span>
-                <span className="w-10 text-right">{money(l.quantity)}</span>
-                <span className="w-14 text-right">{money(l.unit_price)}</span>
-                <span className="w-14 text-right">{money(l.line_total)}</span>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={desde}
+                  onChange={(e) => {
+                    setDesde(e.target.value);
+                    setRango("");
+                  }}
+                  className="flex-1 min-w-0 h-8 px-2 border border-gray-300 rounded-lg text-[12px] bg-white"
+                />
+                <span className="text-[11px] text-gray-400">a</span>
+                <input
+                  type="date"
+                  value={hasta}
+                  onChange={(e) => {
+                    setHasta(e.target.value);
+                    setRango("");
+                  }}
+                  className="flex-1 min-w-0 h-8 px-2 border border-gray-300 rounded-lg text-[12px] bg-white"
+                />
               </div>
-            ))}
+            </div>
+          </div>
 
-            <p className="text-[11px] text-gray-400 mt-3">
-              Todos los precios en dolares, sin importar en que moneda se hizo cada nota.
-            </p>
-          </>
-        )}
+          {/* ---------- derecha: resultados ---------- */}
+          <div className="min-h-0 flex flex-col">
+            <div className="px-5 pt-4 pb-3 border-b border-gray-100">
+              <p className="text-[13px] text-gray-600 flex items-center gap-2 flex-wrap">
+                {busy && <span className="w-3.5 h-3.5 rounded-full border-2 border-brand-200 border-t-brand-700 animate-spin" />}
+                {cliente ? (
+                  <Pill tone="brand">{cliente.name}</Pill>
+                ) : (
+                  <Pill tone="neutral">Todos los clientes</Pill>
+                )}
+                {texto.trim() && <Pill tone="violet">“{texto.trim()}”</Pill>}
+                {(desde || hasta) && (
+                  <Pill tone="neutral">
+                    {desde || "inicio"} → {hasta || "hoy"}
+                  </Pill>
+                )}
+              </p>
+
+              {res && res.lineas_count > 0 && (
+                <div className="grid grid-cols-4 gap-2 mt-3">
+                  {[
+                    { k: "Unidades", v: money(res.unidades).replace(/\.00$/, "") },
+                    { k: "Notas", v: String(res.notas) },
+                    { k: "Total vendido", v: `$${money(res.total_usd)}` },
+                    { k: "Ultimo precio", v: res.ultimo_precio != null ? `$${money(res.ultimo_precio)}` : "—" },
+                  ].map((x) => (
+                    <div key={x.k} className="rounded-lg bg-gray-50 px-3 py-2">
+                      <p className="text-[11px] text-gray-500">{x.k}</p>
+                      <p className="text-[16px] font-semibold text-gray-900 tracking-tight">{x.v}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {res && res.por_mes.length > 1 && (
+                <div className="flex gap-1 items-end h-14 mt-3">
+                  {res.por_mes.map((m) => (
+                    <div key={m.mes} className="flex-1 text-center group relative">
+                      <div
+                        className="bg-brand-200 group-hover:bg-brand-600 rounded-t transition-colors"
+                        style={{ height: `${maxMes > 0 ? (m.unidades / maxMes) * 40 : 0}px`, minHeight: "2px" }}
+                      />
+                      <div className="text-[9.5px] text-gray-400 mt-1">{MESES_CORTOS[Number(m.mes.slice(5, 7)) - 1]}</div>
+                      <div className="hidden group-hover:block absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10">
+                        {money(m.unidades)} uds · ${money(m.total)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {err && <p className="m-5 text-sm text-red-600">{err}</p>}
+
+              {!res && !err && (
+                <EmptyState icon={ScanSearch} title="Elige un cliente o escribe un producto">
+                  Por ejemplo: toca un cliente a la izquierda para ver todo lo que te ha comprado, o escribe
+                  “cruceta” para ver a quien se la vendiste. La busqueda se hace sola.
+                </EmptyState>
+              )}
+
+              {res && res.lineas_count === 0 && (
+                <EmptyState icon={Inbox} title="No hay resultados">
+                  {cliente && texto.trim()
+                    ? `${cliente.name} no ha llevado nada que coincida con “${texto.trim()}”.`
+                    : "Prueba con menos palabras o quita el rango de fechas."}
+                </EmptyState>
+              )}
+
+              {res && res.lineas_count > 0 && (
+                <>
+                  <div className="sticky top-0 bg-white/95 backdrop-blur flex gap-3 px-5 h-9 items-center border-b border-gray-100 text-[11px] font-medium text-gray-400">
+                    <span className="w-20">Fecha</span>
+                    <span className="w-12">Nota</span>
+                    {!cliente && <span className="w-36">Cliente</span>}
+                    <span className="flex-1 min-w-0">Producto</span>
+                    <span className="w-12 text-right">Cant</span>
+                    <span className="w-16 text-right">Precio $</span>
+                    <span className="w-20 text-right">Total $</span>
+                  </div>
+                  {res.lineas.map((l, i) => (
+                    <button
+                      key={`${l.note_id}-${i}`}
+                      onClick={() => onAbrirNota(l.note_id)}
+                      title="Abrir la nota"
+                      className="w-full flex gap-3 px-5 h-10 items-center border-b border-gray-50 text-[12.5px] text-left hover:bg-brand-50/40"
+                    >
+                      <span className="w-20 text-gray-500">{l.note_date}</span>
+                      <span className="w-12 text-brand-700 font-mono text-[11.5px]">#{l.sequence_number}</span>
+                      {!cliente && <span className="w-36 truncate text-gray-600">{l.display_name}</span>}
+                      <span className="flex-1 min-w-0 truncate text-gray-800" title={l.description}>
+                        {l.description}
+                      </span>
+                      <span className="w-12 text-right">{money(l.quantity).replace(/\.00$/, "")}</span>
+                      <span className="w-16 text-right">{money(l.unit_price)}</span>
+                      <span className="w-20 text-right font-medium">{money(l.line_total)}</span>
+                    </button>
+                  ))}
+                  <p className="text-[11px] text-gray-400 px-5 py-3">
+                    Todos los precios en dolares, sin importar en que moneda se hizo cada nota. Toca una linea para abrir la nota.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
