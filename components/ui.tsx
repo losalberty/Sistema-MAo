@@ -27,9 +27,19 @@ export const notify = {
 };
 
 export function AppToaster() {
+  // los avisos siguen el modo claro u oscuro del sistema
+  const [oscuro, setOscuro] = useState(false);
+  useEffect(() => {
+    const ver = () => setOscuro(document.documentElement.classList.contains("dark"));
+    ver();
+    const obs = new MutationObserver(ver);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
   return (
     <Toaster
       position="bottom-right"
+      theme={oscuro ? "dark" : "light"}
       richColors
       closeButton
       duration={3500}
@@ -263,14 +273,16 @@ export function NumInput({
 }
 
 /* ============================================================
-   BOTON DE BARRA: icono arriba, etiqueta abajo
+   BOTON DE BARRA: icono a la izquierda y etiqueta, estilo moderno.
+   tone="brand" es el boton principal (relleno azul).
    ============================================================ */
 
 type Tono = "neutral" | "brand" | "success" | "danger";
 
 const TONO_BARRA: Record<Tono, string> = {
-  neutral: "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
-  brand: "text-brand-700 hover:bg-brand-50",
+  neutral: "text-gray-700 hover:bg-gray-100 hover:text-gray-900",
+  brand:
+    "text-white font-medium bg-gradient-to-b from-brand-600 to-brand-800 shadow-[inset_0_1px_0_rgba(255,255,255,.18),0_2px_8px_-3px_rgba(36,58,102,.5)] hover:brightness-110",
   success: "text-emerald-700 hover:bg-emerald-50",
   danger: "text-red-600 hover:bg-red-50",
 };
@@ -292,24 +304,25 @@ export function ToolbarButton({
   active?: boolean;
   title?: string;
 }) {
+  const texto = label.charAt(0).toUpperCase() + label.slice(1);
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      title={title ?? label}
-      className={`flex flex-col items-center gap-1 min-w-[64px] px-2.5 py-1.5 rounded-lg transition-colors ${
-        active ? "bg-brand-50 text-brand-700" : TONO_BARRA[tone]
+      title={title ?? texto}
+      className={`h-8 px-2.5 rounded-lg inline-flex items-center gap-1.5 text-[13px] whitespace-nowrap shrink-0 transition-colors ${
+        active ? "bg-brand-50 text-brand-800 font-medium ring-1 ring-brand-200" : TONO_BARRA[tone]
       } disabled:opacity-30 disabled:pointer-events-none`}
     >
-      <Icono size={18} strokeWidth={1.75} />
-      <span className="text-[10.5px] leading-none whitespace-nowrap">{label}</span>
+      <Icono size={15} strokeWidth={1.9} />
+      {texto}
     </button>
   );
 }
 
 export function ToolbarSeparator() {
-  return <div className="w-px self-stretch bg-gray-200 my-1.5 mx-1" />;
+  return <div className="w-px h-5 bg-gray-200 mx-1 shrink-0" />;
 }
 
 /* ============================================================
