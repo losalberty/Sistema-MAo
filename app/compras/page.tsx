@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { Lateral } from "@/components/Ventana";
 import {
   EmptyState,
   NumInput,
@@ -2029,7 +2030,7 @@ function FacturaModal({
   const gastos = inv ? Number(inv.freight) + Number(inv.customs) + Number(inv.other_costs) : 0;
 
   return (
-    <Ventana
+    <Lateral
       titulo={inv ? `Factura ${inv.supplier_invoice_number || "sin numero"}` : "Factura"}
       subtitulo={
         inv ? (
@@ -2040,13 +2041,10 @@ function FacturaModal({
         ) : undefined
       }
       icono={FileText}
-      ancho="max-w-3xl"
+      ancho="w-[680px]"
       onClose={onClose}
       pie={
         <>
-          <button onClick={onClose} className="h-9 px-3 text-sm text-gray-600 rounded-lg hover:bg-gray-100">
-            Cerrar
-          </button>
           {pendiente > 0.005 && (
             <button
               onClick={onPagar}
@@ -2120,6 +2118,6 @@ function FacturaModal({
           </div>
         </>
       )}
-    </Ventana>
+    </Lateral>
   );
 }
