@@ -102,3 +102,162 @@
     background: white !important;
   }
 }
+
+/* ============================================================
+   Modo oscuro (se activa con el boton de la luna, arriba)
+   Las reglas de abajo se generan solas a partir de los colores
+   que usa el sistema.
+   ============================================================ */
+html.dark{color-scheme:dark}
+.dark body{background-color:#0b0e14;color:#e8ecf4}
+.dark .bg-\[\#fbfbfc\]{background-color:#0f131b}
+.dark .bg-\[\#f5f6f8\]\/85{background-color:rgba(11,14,20,.85)}
+.dark .ring-\[\#f5f6f8\]{--tw-ring-color:#0b0e14}
+.dark .shadow-card{box-shadow:0 0 0 1px rgba(255,255,255,.02),0 1px 2px rgba(0,0,0,.4)}
+.dark .shadow-pop{box-shadow:0 0 0 1px rgba(255,255,255,.05),0 24px 60px -12px rgba(0,0,0,.75)}
+.dark input,.dark select,.dark textarea{background-color:#0f141d;color:#e8ecf4;border-color:#2d3546}
+.dark input::placeholder,.dark textarea::placeholder{color:#59627a}
+.dark input:disabled{background-color:#141a24;color:#6b7489}
+.dark .skeleton{background-color:#1b2230}
+.dark ::selection{background:#263661}
+.dark *{scrollbar-color:#2d3546 transparent}
+.dark ::-webkit-scrollbar-thumb{background:#2d3546;background-clip:content-box}
+.dark svg [stroke="#eef0f4"]{stroke:#232a38}
+.dark svg [fill="#9aa1b1"]{fill:#6b7489}
+.dark svg circle[fill="white"]{fill:#121722}
+.dark kbd{background-color:#151b27;border-color:#2d3546;color:#8b94a8}
+.dark .bg-gray-900{background-color:#1e2533}
+.dark .bg-amber-100{background-color:rgba(245,158,11,0.200)}
+.dark .bg-amber-50{background-color:rgba(245,158,11,0.120)}
+.dark .bg-amber-50\/40{background-color:rgba(245,158,11,0.048)}
+.dark .bg-amber-50\/60{background-color:rgba(245,158,11,0.072)}
+.dark .bg-blue-50{background-color:rgba(59,130,246,0.120)}
+.dark .bg-brand-200{background-color:#263661}
+.dark .bg-brand-50{background-color:#18223b}
+.dark .bg-brand-50\/30{background-color:rgba(24,34,59,0.30)}
+.dark .bg-brand-50\/40{background-color:rgba(24,34,59,0.40)}
+.dark .bg-brand-50\/60{background-color:rgba(24,34,59,0.60)}
+.dark .bg-brand-50\/70{background-color:rgba(24,34,59,0.70)}
+.dark .bg-emerald-50{background-color:rgba(16,185,129,0.120)}
+.dark .bg-emerald-50\/40{background-color:rgba(16,185,129,0.048)}
+.dark .bg-emerald-50\/50{background-color:rgba(16,185,129,0.060)}
+.dark .bg-gray-100{background-color:#1b2230}
+.dark .bg-gray-200{background-color:#232a38}
+.dark .bg-gray-200\/60{background-color:rgba(35,42,56,0.60)}
+.dark .bg-gray-300{background-color:#2d3546}
+.dark .bg-gray-50{background-color:#151b27}
+.dark .bg-gray-50\/40{background-color:rgba(21,27,39,0.40)}
+.dark .bg-gray-50\/50{background-color:rgba(21,27,39,0.50)}
+.dark .bg-gray-50\/60{background-color:rgba(21,27,39,0.60)}
+.dark .bg-gray-50\/80{background-color:rgba(21,27,39,0.80)}
+.dark .bg-green-100{background-color:rgba(34,197,94,0.200)}
+.dark .bg-indigo-50{background-color:rgba(99,102,241,0.120)}
+.dark .bg-indigo-50\/40{background-color:rgba(99,102,241,0.048)}
+.dark .bg-orange-50{background-color:rgba(249,115,22,0.120)}
+.dark .bg-orange-50\/50{background-color:rgba(249,115,22,0.060)}
+.dark .bg-red-100{background-color:rgba(239,68,68,0.200)}
+.dark .bg-red-50{background-color:rgba(239,68,68,0.120)}
+.dark .bg-red-50\/60{background-color:rgba(239,68,68,0.072)}
+.dark .bg-sky-50{background-color:rgba(14,165,233,0.120)}
+.dark .bg-violet-50{background-color:rgba(139,92,246,0.120)}
+.dark .bg-white{background-color:#121722}
+.dark .bg-white\/95{background-color:rgba(18,23,34,0.95)}
+.dark .border-amber-100{border-color:rgba(245,158,11,.35)}
+.dark .border-amber-300{border-color:rgba(245,158,11,.35)}
+.dark .border-brand-100{border-color:#2d3f6b}
+.dark .border-brand-100\/60{border-color:#2d3f6b}
+.dark .border-brand-200{border-color:#2d3f6b}
+.dark .border-brand-300{border-color:#3a5185}
+.dark .border-emerald-200{border-color:rgba(16,185,129,.35)}
+.dark .border-emerald-300{border-color:rgba(16,185,129,.35)}
+.dark .border-gray-100{border-color:#1b2230}
+.dark .border-gray-200{border-color:#262e3d}
+.dark .border-gray-200\/80{border-color:rgba(38,46,61,0.80)}
+.dark .border-gray-300{border-color:#323b4d}
+.dark .border-gray-50{border-color:#161c28}
+.dark .border-indigo-300{border-color:rgba(99,102,241,.35)}
+.dark .border-orange-200{border-color:rgba(249,115,22,.35)}
+.dark .border-red-100{border-color:rgba(239,68,68,.35)}
+.dark .border-red-200{border-color:rgba(239,68,68,.35)}
+.dark .border-sky-100{border-color:rgba(14,165,233,.35)}
+.dark .border-violet-100{border-color:rgba(139,92,246,.35)}
+.dark .disabled\:bg-gray-50:disabled{background-color:#151b27}
+.dark .disabled\:text-gray-400:disabled{color:#6b7489}
+.dark .group:hover .group-hover\:text-gray-500{color:#8b94a8}
+.dark .group:hover .group-hover\:text-gray-600{color:#a8b1c3}
+.dark .hover\:bg-amber-100:hover{background-color:rgba(245,158,11,0.200)}
+.dark .hover\:bg-brand-50:hover{background-color:#18223b}
+.dark .hover\:bg-brand-50\/40:hover{background-color:rgba(24,34,59,0.40)}
+.dark .hover\:bg-brand-50\/50:hover{background-color:rgba(24,34,59,0.50)}
+.dark .hover\:bg-emerald-50:hover{background-color:rgba(16,185,129,0.120)}
+.dark .hover\:bg-gray-100:hover{background-color:#1b2230}
+.dark .hover\:bg-gray-100\/80:hover{background-color:rgba(27,34,48,0.80)}
+.dark .hover\:bg-gray-200\/60:hover{background-color:rgba(35,42,56,0.60)}
+.dark .hover\:bg-gray-50:hover{background-color:#151b27}
+.dark .hover\:bg-gray-50\/60:hover{background-color:rgba(21,27,39,0.60)}
+.dark .hover\:bg-gray-50\/70:hover{background-color:rgba(21,27,39,0.70)}
+.dark .hover\:bg-gray-50\/80:hover{background-color:rgba(21,27,39,0.80)}
+.dark .hover\:bg-red-50:hover{background-color:rgba(239,68,68,0.120)}
+.dark .hover\:bg-white:hover{background-color:#121722}
+.dark .hover\:bg-white\/60:hover{background-color:rgba(18,23,34,0.60)}
+.dark .hover\:border-brand-300:hover{border-color:#3a5185}
+.dark .hover\:border-emerald-200:hover{border-color:rgba(16,185,129,.35)}
+.dark .hover\:border-gray-300:hover{border-color:#323b4d}
+.dark .hover\:border-gray-400:hover{border-color:#465063}
+.dark .hover\:border-red-200:hover{border-color:rgba(239,68,68,.35)}
+.dark .hover\:ring-gray-200:hover{--tw-ring-color:#262e3d}
+.dark .hover\:text-brand-700:hover{color:#9bb3ea}
+.dark .hover\:text-emerald-700:hover{color:#6ee7b7}
+.dark .hover\:text-gray-600:hover{color:#a8b1c3}
+.dark .hover\:text-gray-700:hover{color:#c3cad8}
+.dark .hover\:text-gray-800:hover{color:#d6dbe6}
+.dark .hover\:text-gray-900:hover{color:#e8ecf4}
+.dark .hover\:text-gray-950:hover{color:#f1f4f9}
+.dark .hover\:text-red-600:hover{color:#fca5a5}
+.dark .placeholder\:text-gray-400::placeholder{color:#6b7489}
+.dark .ring-amber-100{--tw-ring-color:rgba(245,158,11,.35)}
+.dark .ring-brand-100{--tw-ring-color:#2d3f6b}
+.dark .ring-brand-200{--tw-ring-color:#2d3f6b}
+.dark .ring-emerald-100{--tw-ring-color:rgba(16,185,129,.35)}
+.dark .ring-gray-200{--tw-ring-color:#262e3d}
+.dark .ring-orange-100{--tw-ring-color:rgba(249,115,22,.35)}
+.dark .ring-red-100{--tw-ring-color:rgba(239,68,68,.35)}
+.dark .ring-sky-100{--tw-ring-color:rgba(14,165,233,.35)}
+.dark .ring-violet-100{--tw-ring-color:rgba(139,92,246,.35)}
+.dark .text-amber-600{color:#fcd34d}
+.dark .text-amber-700{color:#fcd34d}
+.dark .text-amber-800{color:#fcd34d}
+.dark .text-amber-900{color:#fcd34d}
+.dark .text-blue-800{color:#93c5fd}
+.dark .text-brand-500{color:#7d9be0}
+.dark .text-brand-600{color:#8aa5e6}
+.dark .text-brand-700{color:#9bb3ea}
+.dark .text-brand-800{color:#b4c6f2}
+.dark .text-brand-900{color:#c4d3f6}
+.dark .text-emerald-600{color:#6ee7b7}
+.dark .text-emerald-700{color:#6ee7b7}
+.dark .text-emerald-800{color:#6ee7b7}
+.dark .text-gray-100{color:#2d3546}
+.dark .text-gray-200{color:#3a4253}
+.dark .text-gray-300{color:#4c5468}
+.dark .text-gray-400{color:#6b7489}
+.dark .text-gray-500{color:#8b94a8}
+.dark .text-gray-600{color:#a8b1c3}
+.dark .text-gray-700{color:#c3cad8}
+.dark .text-gray-800{color:#d6dbe6}
+.dark .text-gray-900{color:#e8ecf4}
+.dark .text-green-800{color:#86efac}
+.dark .text-indigo-800{color:#a5b4fc}
+.dark .text-orange-600{color:#fdba74}
+.dark .text-orange-700{color:#fdba74}
+.dark .text-orange-800{color:#fdba74}
+.dark .text-orange-900{color:#fdba74}
+.dark .text-red-600{color:#fca5a5}
+.dark .text-red-700{color:#fca5a5}
+.dark .text-red-800{color:#fca5a5}
+.dark .text-sky-700{color:#7dd3fc}
+.dark .text-sky-800{color:#7dd3fc}
+.dark .text-sky-900{color:#7dd3fc}
+.dark .text-violet-700{color:#c4b5fd}
+.dark .text-violet-800{color:#c4b5fd}
+.dark .text-violet-900{color:#c4b5fd}
