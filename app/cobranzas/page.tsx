@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { EmptyState, Pill, SkeletonRows, ToolbarButton, ToolbarSeparator, notify, type PillTone } from "@/components/ui";
-import { Barra, Campo, Encabezado, Segmento, Tarjeta, Ventana, descargarExcel } from "@/components/Ventana";
+import { Barra, Campo, Encabezado, Lateral, Segmento, Tarjeta, descargarExcel } from "@/components/Ventana";
+import { colorDe, iniciales } from "@/components/Paleta";
 
 type Deudor = {
   display_name: string;
@@ -430,22 +431,24 @@ export default function CobranzasPage() {
       )}
 
       {cuenta && (
-        <Ventana
-          titulo={`Estado de cuenta · ${cuenta.display_name}`}
+        <Lateral
+          titulo={cuenta.display_name}
+          arriba={<span className="text-[12px] text-gray-400">Estado de cuenta</span>}
           subtitulo={
             cuenta.credit_days > 0 ? `${cuenta.credit_days} dias de credito` : "sin dias de credito configurados"
           }
-          icono={FileText}
-          ancho="max-w-2xl"
+          avatar={
+            <span
+              className="w-11 h-11 rounded-full text-white text-[14px] font-semibold flex items-center justify-center shrink-0 print:hidden"
+              style={{ background: colorDe(cuenta.display_name ?? "") }}
+            >
+              {iniciales(cuenta.display_name ?? "")}
+            </span>
+          }
+          ancho="w-[600px]"
           onClose={() => setCuenta(null)}
           pie={
             <>
-              <button
-                onClick={() => setCuenta(null)}
-                className="h-9 px-3 text-sm text-gray-600 rounded-lg hover:bg-gray-100"
-              >
-                Cerrar
-              </button>
               <button
                 onClick={() => window.print()}
                 className="h-9 px-4 inline-flex items-center gap-1.5 bg-brand-700 text-white text-sm font-medium rounded-lg hover:bg-brand-800 shadow-sm"
@@ -481,7 +484,7 @@ export default function CobranzasPage() {
           {cuenta.notas.map((n) => (
             <button
               key={n.id}
-              onClick={() => router.push(`/notas/nueva?id=${n.id}`)}
+              onClick={() => router.push(`/notas?nota=${n.id}${n.pendiente > 0.005 ? "&abonar=1" : ""}`)}
               title="Abrir la nota"
               className="w-full flex gap-3 px-1 py-2 border-b border-gray-50 text-[13px] text-left hover:bg-gray-50"
             >
@@ -499,7 +502,7 @@ export default function CobranzasPage() {
               </span>
             </button>
           ))}
-        </Ventana>
+        </Lateral>
       )}
     </main>
   );
