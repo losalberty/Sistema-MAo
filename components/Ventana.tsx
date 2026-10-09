@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { X, type LucideIcon } from "lucide-react";
 
 /* ============================================================
@@ -139,9 +139,9 @@ export function Encabezado({
   derecha?: ReactNode;
 }) {
   return (
-    <div className="flex items-end justify-between gap-4 mb-3 print:hidden">
+    <div className="flex items-end justify-between gap-4 mb-4 print:hidden">
       <div className="min-w-0">
-        <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">{titulo}</h1>
+        <h1 className="text-[24px] font-semibold text-gray-900 tracking-tight">{titulo}</h1>
         {children && <p className="text-[13px] text-gray-500">{children}</p>}
       </div>
       {derecha}
@@ -149,11 +149,145 @@ export function Encabezado({
   );
 }
 
+/* barra de botones de cada seccion: una tira limpia, con los botones en fila */
 export function Barra({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-3 flex items-center gap-0.5 rounded-xl bg-white border border-gray-200 shadow-card px-1.5 py-1 overflow-x-auto print:hidden">
+    <div className="mb-4 flex items-center gap-1 rounded-xl bg-white border border-gray-200 shadow-card p-1 overflow-x-auto print:hidden">
       {children}
     </div>
+  );
+}
+
+/* ============================================================
+   Panel lateral: se desliza desde la derecha (como la ficha de
+   una nota). Para ver el detalle de algo sin perder la lista.
+   ============================================================ */
+
+export function Lateral({
+  titulo,
+  subtitulo,
+  icono: Icono,
+  avatar,
+  arriba,
+  onClose,
+  children,
+  pie,
+  ancho = "w-[520px]",
+}: {
+  titulo: ReactNode;
+  subtitulo?: ReactNode;
+  icono?: LucideIcon;
+  avatar?: ReactNode;
+  arriba?: ReactNode;
+  onClose: () => void;
+  children: ReactNode;
+  pie?: ReactNode;
+  ancho?: string;
+}) {
+  const raiz = useRef<HTMLDivElement>(null);
+  const [abierto, setAbierto] = useState(false);
+
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setAbierto(true));
+    return () => cancelAnimationFrame(t);
+  }, []);
+
+  const cerrar = useCallback(() => {
+    setAbierto(false);
+    setTimeout(onClose, 220);
+  }, [onClose]);
+
+  useEffect(() => {
+    function tecla(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      // solo se cierra si es la ventana de mas arriba
+      const abiertos = Array.from(
+        document.querySelectorAll('[role="dialog"][aria-modal="true"]:not([aria-hidden="true"] *)')
+      );
+      if (abiertos[abiertos.length - 1] !== raiz.current) return;
+      cerrar();
+    }
+    document.addEventListener("keydown", tecla);
+    return () => document.removeEventListener("keydown", tecla);
+  }, [cerrar]);
+
+  return (
+    <div ref={raiz} className="fixed inset-0 z-50 print:static print:block" role="dialog" aria-modal="true">
+      <div
+        className={`absolute inset-0 bg-gray-950/30 backdrop-blur-[1.5px] transition-opacity duration-200 print:hidden ${
+          abierto ? "opacity-100" : "opacity-0"
+        }`}
+        onMouseDown={cerrar}
+      />
+      <aside
+        className={`absolute top-2 right-2 bottom-2 ${ancho} max-w-[calc(100vw-16px)] flex flex-col rounded-2xl bg-white border border-gray-200 shadow-pop overflow-hidden transition-transform duration-300 ease-[cubic-bezier(.2,.85,.25,1)] print:static print:w-full print:max-w-none print:shadow-none print:border-0 print:transform-none ${
+          abierto ? "translate-x-0" : "translate-x-[calc(100%+24px)]"
+        }`}
+      >
+        <div className="px-5 pt-4 pb-3 border-b border-gray-100">
+          <div className="flex items-start gap-3">
+            {avatar ??
+              (Icono && (
+                <span className="w-10 h-10 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center shrink-0 print:hidden">
+                  <Icono size={18} />
+                </span>
+              ))}
+            <div className="min-w-0 flex-1">
+              {arriba && <div className="flex items-center gap-2 mb-0.5">{arriba}</div>}
+              <h2 className="text-[17px] font-semibold text-gray-900 tracking-tight truncate">{titulo}</h2>
+              {subtitulo && <div className="text-[12.5px] text-gray-500">{subtitulo}</div>}
+            </div>
+            <button
+              onClick={cerrar}
+              title="Cerrar (Esc)"
+              aria-label="Cerrar"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-gray-100 shrink-0 print:hidden"
+            >
+              <X size={17} />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 print:overflow-visible">{children}</div>
+        {pie && (
+          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/60 flex items-center justify-end gap-2 flex-wrap print:hidden">
+            {pie}
+          </div>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+/* boton secundario con icono (blanco con borde) */
+export function BotonSec({
+  icon: Icono,
+  label,
+  onClick,
+  activo,
+  tono,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+  activo?: boolean;
+  tono?: "ok" | "peligro";
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`h-[34px] px-3 rounded-[9px] inline-flex items-center gap-1.5 text-[13px] font-medium border shadow-[0_1px_2px_rgba(16,24,40,.05)] whitespace-nowrap transition-colors ${
+        activo
+          ? "border-brand-200 bg-brand-50 text-brand-800"
+          : tono === "ok"
+          ? "border-gray-200 bg-white text-emerald-700 hover:border-emerald-200 hover:bg-emerald-50"
+          : tono === "peligro"
+          ? "border-gray-200 bg-white text-red-600 hover:border-red-200 hover:bg-red-50"
+          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+      }`}
+    >
+      <Icono size={15} strokeWidth={1.9} />
+      {label}
+    </button>
   );
 }
 
@@ -175,17 +309,17 @@ export function Tarjeta({
   acento?: string;
 }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-card px-4 py-3">
-      <p className="text-[11.5px] text-gray-500 flex items-center gap-1.5">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-card px-4 pt-3.5 pb-3 transition-all hover:-translate-y-0.5 hover:shadow-pop">
+      <p className="text-[12.5px] text-gray-500 flex items-center gap-2">
         {Icono && (
-          <span className={`w-5 h-5 rounded-md flex items-center justify-center ${acento ?? "bg-gray-100 text-gray-500"}`}>
-            <Icono size={12} />
+          <span className={`w-6 h-6 rounded-[7px] flex items-center justify-center ${acento ?? "bg-gray-100 text-gray-500"}`}>
+            <Icono size={13} />
           </span>
         )}
         {label}
       </p>
-      <p className={`text-[21px] font-semibold tracking-tight ${tono}`}>{valor}</p>
-      {sub && <p className={`text-[11px] ${subTono}`}>{sub}</p>}
+      <p className={`text-[24px] font-semibold tracking-tight mt-1.5 leading-tight ${tono}`}>{valor}</p>
+      {sub && <p className={`text-[12px] mt-0.5 ${subTono}`}>{sub}</p>}
     </div>
   );
 }
