@@ -165,7 +165,7 @@ export default function Paleta({ abierto, onClose }: { abierto: boolean; onClose
         sub: fecha(n.note_date),
         icono: FileText,
         derecha: n.falta > 0.005 && n.payment_status !== "ANULADO" ? `debe ${money(n.falta)}` : money(n.total),
-        ir: `/notas/ver?id=${n.id}`,
+        ir: `/notas?nota=${n.id}`,
       })
     );
     r?.clientes.forEach((c) =>
