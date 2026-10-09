@@ -28,6 +28,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import Paleta from "@/components/Paleta";
 import { NumInput, notify } from "@/components/ui";
+import { useAlClicFuera } from "@/components/useFuera";
 import { guardarTasas, sonDeHoy, useTasas } from "@/components/Tasas";
 
 type Item = { label: string; icon: LucideIcon; href: string; aviso?: "vencidas" | "reponer" };
@@ -111,6 +112,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [avisos, setAvisos] = useState<Avisos | null>(null);
   const [verAvisos, setVerAvisos] = useState(false);
   const ultimaCarga = useRef(0);
+  const cajaAvisos = useRef<HTMLDivElement>(null);
+  const cerrarAvisos = useCallback(() => setVerAvisos(false), []);
+  // la lista de avisos se cierra al hacer clic en cualquier otro lado o con Esc
+  useAlClicFuera(cajaAvisos, verAvisos, cerrarAvisos);
 
   useEffect(() => {
     try {
@@ -377,7 +382,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </button>
 
           {/* ---------- campanita ---------- */}
-          <div className="relative">
+          <div className="relative" ref={cajaAvisos}>
             <button
               onClick={() => {
                 setVerAvisos((v) => !v);
@@ -397,16 +402,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               )}
             </button>
             {verAvisos && (
-              <>
-                <div className="fixed inset-0 z-40" onMouseDown={() => setVerAvisos(false)} />
-                <PanelAvisos
-                  avisos={avisos}
-                  onIr={(href) => {
-                    setVerAvisos(false);
-                    router.push(href);
-                  }}
-                />
-              </>
+              <PanelAvisos
+                avisos={avisos}
+                onIr={(href) => {
+                  setVerAvisos(false);
+                  router.push(href);
+                }}
+              />
             )}
           </div>
 
