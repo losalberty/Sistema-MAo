@@ -13,6 +13,7 @@ import {
   FileText,
   LayoutDashboard,
   LogOut,
+  Moon,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
@@ -20,6 +21,7 @@ import {
   Plus,
   Receipt,
   Search,
+  Sun,
   Undo2,
   Users,
   Wallet,
@@ -111,6 +113,20 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [paleta, setPaleta] = useState(false);
   const [avisos, setAvisos] = useState<Avisos | null>(null);
   const [verAvisos, setVerAvisos] = useState(false);
+  const [oscuro, setOscuro] = useState(false);
+
+  // modo oscuro: se recuerda en esta computadora
+  useEffect(() => {
+    setOscuro(document.documentElement.classList.contains("dark"));
+  }, []);
+  function cambiarTema() {
+    const nuevo = !oscuro;
+    setOscuro(nuevo);
+    document.documentElement.classList.toggle("dark", nuevo);
+    try {
+      localStorage.setItem("tema", nuevo ? "oscuro" : "claro");
+    } catch {}
+  }
   const ultimaCarga = useRef(0);
   const cajaAvisos = useRef<HTMLDivElement>(null);
   const cerrarAvisos = useCallback(() => setVerAvisos(false), []);
@@ -411,6 +427,15 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               />
             )}
           </div>
+
+          <button
+            onClick={cambiarTema}
+            title={oscuro ? "Modo claro" : "Modo oscuro"}
+            aria-label={oscuro ? "Modo claro" : "Modo oscuro"}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-200/60"
+          >
+            {oscuro ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
 
           <div className="w-px h-5 bg-gray-200 mx-1.5" />
 
