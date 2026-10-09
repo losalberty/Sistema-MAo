@@ -30,7 +30,7 @@ import {
   notify,
   type PillTone,
 } from "@/components/ui";
-import { Barra, Campo, Encabezado, Segmento, Tarjeta, Ventana, descargarExcel, inputCls } from "@/components/Ventana";
+import { Barra, Campo, Encabezado, Lateral, Segmento, Tarjeta, Ventana, descargarExcel, inputCls } from "@/components/Ventana";
 import { leerFilas } from "@/components/Excel";
 
 type StockRow = {
@@ -697,11 +697,21 @@ function KardexModal({
   const dura = k && k.vendido_90d > 0 ? Math.round(k.stock / (k.vendido_90d / 90)) : null;
 
   return (
-    <Ventana
+    <Lateral
       titulo={k?.description ?? "Cargando..."}
-      subtitulo={k ? `${k.code} · ${k.supply_type === "PEDIDO" ? "bajo pedido" : "de almacen"}` : undefined}
+      arriba={
+        k ? (
+          <>
+            <span className="text-[12px] font-mono text-gray-400">{k.code}</span>
+            <Pill tone={k.supply_type === "PEDIDO" ? "violet" : "neutral"}>
+              {k.supply_type === "PEDIDO" ? "bajo pedido" : "de almacen"}
+            </Pill>
+          </>
+        ) : undefined
+      }
+      subtitulo="Existencia, ajuste y todos sus movimientos"
       icono={History}
-      ancho="max-w-2xl"
+      ancho="w-[620px]"
       onClose={onClose}
     >
       {k && (
@@ -805,7 +815,7 @@ function KardexModal({
           <span className="w-12 text-right">{num(m.saldo)}</span>
         </div>
       ))}
-    </Ventana>
+    </Lateral>
   );
 }
 
