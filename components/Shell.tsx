@@ -442,7 +442,7 @@ function PanelAvisos({ avisos, onIr }: { avisos: Avisos | null; onIr: (href: str
   const fila = (n: { id: string; sequence_number: number; cliente: string; falta: number; dias: number }, vencida: boolean) => (
     <button
       key={n.id}
-      onClick={() => onIr(`/notas/ver?id=${n.id}`)}
+      onClick={() => onIr(`/notas?nota=${n.id}`)}
       className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-gray-50"
     >
       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${vencida ? "bg-red-500" : "bg-amber-500"}`} />
