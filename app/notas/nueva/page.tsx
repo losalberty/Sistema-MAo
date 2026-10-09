@@ -365,14 +365,11 @@ function NuevaNotaInner() {
   function addProduct(p: Producto, tierUsed: number) {
     const price = priceOf(p, tierUsed);
     // si el repuesto ya esta en la nota, se le suma 1 en vez de repetir la linea
-    const ya = items.findIndex((it) => it.product_id === p.id);
-    if (ya >= 0) {
-      const nueva = items[ya].quantity + 1;
-      setItems((prev) => prev.map((it, idx) => (idx === ya ? recalc({ ...it, quantity: nueva }) : it)));
-      avisarExistencia(p, nueva);
-      notify.info(`${p.code}: ahora son ${nueva}`, "Ya estaba en la nota, se le sumo 1.");
-    } else {
-      setItems((prev) => [
+    const ya = items.find((it) => it.product_id === p.id);
+    setItems((prev) => {
+      const idx = prev.findIndex((it) => it.product_id === p.id);
+      if (idx >= 0) return prev.map((it, k) => (k === idx ? recalc({ ...it, quantity: it.quantity + 1 }) : it));
+      return [
         ...prev,
         {
           product_id: p.id,
@@ -388,7 +385,12 @@ function NuevaNotaInner() {
           stock: p.stock_quantity != null ? Number(p.stock_quantity) : null,
           supply: p.supply_type ?? "ALMACEN",
         },
-      ]);
+      ];
+    });
+    if (ya) {
+      avisarExistencia(p, ya.quantity + 1);
+      notify.info(`${p.code}: ahora son ${ya.quantity + 1}`, "Ya estaba en la nota, se le sumo 1.");
+    } else {
       avisarExistencia(p, 1);
     }
     // invalidar cualquier busqueda que siga en camino
@@ -837,10 +839,7 @@ function NuevaNotaInner() {
       {showPicker && (
         <ProductPicker
           tier={tier}
-          onPick={(p, t) => {
-            addProduct(p as Producto, t);
-            setShowPicker(false);
-          }}
+          onPick={(p, t) => addProduct(p as Producto, t)}
           onClose={() => setShowPicker(false)}
         />
       )}
