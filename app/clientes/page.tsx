@@ -9,6 +9,8 @@ import {
   Maximize2,
   MessageCircle,
   Pencil,
+  LayoutGrid,
+  List,
   Phone,
   Printer,
   Search,
@@ -32,11 +34,13 @@ import {
   Campo,
   Encabezado,
   IconBtn,
+  Lateral,
   Segmento,
   Ventana,
   descargarExcel,
   inputCls,
 } from "@/components/Ventana";
+import { colorDe, iniciales } from "@/components/Paleta";
 
 type ClientRow = {
   id: string;
@@ -143,6 +147,7 @@ function Clientes() {
   const [filtro, setFiltro] = useState<"todos" | "saldo" | "vencidos">("todos");
   const [marcado, setMarcado] = useState<string | null>(null);
   const [visibles, setVisibles] = useState(POR_PAGINA);
+  const [vista, setVista] = useState<"tarjetas" | "lista">("tarjetas");
 
   const [fichaId, setFichaId] = useState<string | null>(null);
   const [form, setForm] = useState<{ cliente: ClientRow | null } | null>(null);
@@ -363,6 +368,14 @@ function Clientes() {
             />
           </div>
           <Segmento
+            valor={vista}
+            onChange={setVista}
+            opciones={[
+              { k: "tarjetas", l: <LayoutGrid size={14} />, title: "Ver en tarjetas" },
+              { k: "lista", l: <List size={14} />, title: "Ver en lista" },
+            ]}
+          />
+          <Segmento
             valor={filtro}
             onChange={setFiltro}
             opciones={[
@@ -373,6 +386,7 @@ function Clientes() {
           />
         </div>
 
+        {vista === "lista" && (
         <div className="flex gap-3 px-3 py-1.5 border-b border-gray-100 text-[10.5px] uppercase tracking-wide text-gray-400">
           <span className="w-10">n</span>
           <span className="flex-1 min-w-0">cliente</span>
@@ -384,6 +398,77 @@ function Clientes() {
           <span className="w-24 text-right">saldo</span>
           <span className="w-[88px] print:hidden" />
         </div>
+        )}
+
+        {vista === "tarjetas" && lista.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 p-3 bg-gray-50/40">
+            {lista.slice(0, visibles).map((c) => {
+              const saldo = Number(c.balance_due) || 0;
+              const venc = Number(c.overdue) || 0;
+              const on = marcado === c.id;
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => {
+                    setMarcado(c.id);
+                    setFichaId(c.id);
+                  }}
+                  className={`group relative rounded-xl border bg-white p-4 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-pop ${
+                    on ? "border-brand-300 ring-1 ring-brand-200" : "border-gray-200 shadow-card"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="w-10 h-10 rounded-full text-white text-[13px] font-semibold flex items-center justify-center shrink-0"
+                      style={{ background: colorDe(c.name) }}
+                    >
+                      {iniciales(c.name)}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-semibold text-gray-900 truncate">{c.name}</p>
+                      <p className="text-[12px] text-gray-500 truncate">
+                        {[c.city, c.phone].filter(Boolean).join(" · ") || "sin datos de contacto"}
+                      </p>
+                    </div>
+                    {venc > 0.005 ? (
+                      <Pill tone="danger">vencido</Pill>
+                    ) : saldo > 0.005 ? (
+                      <Pill tone="warning">debe</Pill>
+                    ) : (
+                      <Pill tone="success">al dia</Pill>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-3.5 pt-3 border-t border-gray-100">
+                    <div>
+                      <p className="text-[11px] text-gray-400">Saldo</p>
+                      <p className={`text-[14px] font-semibold ${venc > 0.005 ? "text-red-600" : saldo > 0.005 ? "text-amber-700" : "text-gray-900"}`}>
+                        {money(saldo)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-gray-400">Notas</p>
+                      <p className="text-[14px] font-semibold text-gray-900">{c.notes_count ?? 0}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[11px] text-gray-400">Ultima compra</p>
+                      <p className="text-[13px] font-medium text-gray-700">{fechaCorta(c.last_note_date)}</p>
+                    </div>
+                  </div>
+                  <div className="absolute top-3 right-3 hidden group-hover:flex gap-0.5 bg-white rounded-lg shadow-card ring-1 ring-gray-200 p-0.5 print:hidden">
+                    {c.phone && (
+                      <IconBtn title="WhatsApp" tone="success" onClick={() => whatsappCliente(c)}>
+                        <MessageCircle size={14} />
+                      </IconBtn>
+                    )}
+                    <IconBtn title="Editar" onClick={() => setForm({ cliente: c })}>
+                      <Pencil size={14} />
+                    </IconBtn>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {loading && clients.length === 0 && <SkeletonRows rows={8} />}
 
@@ -395,7 +480,7 @@ function Clientes() {
           </EmptyState>
         )}
 
-        {lista.slice(0, visibles).map((c, idx) => {
+        {vista === "lista" && lista.slice(0, visibles).map((c, idx) => {
           const saldo = Number(c.balance_due) || 0;
           const venc = Number(c.overdue) || 0;
           const on = marcado === c.id;
@@ -529,17 +614,31 @@ function FichaCliente({
   const notas = (cuenta?.notas ?? []).filter((n) => !soloPend || n.pendiente > 0.005);
 
   return (
-    <Ventana
+    <Lateral
       titulo={c.name}
-      subtitulo={
-        <span className="inline-flex items-center gap-2">
-          Cliente #{c.client_number}
+      arriba={
+        <>
+          <span className="text-[12px] font-mono text-gray-400">Cliente #{c.client_number}</span>
           <Pill tone={(c.price_tier ?? 1) === 1 ? "neutral" : "brand"}>{TARIFAS[c.price_tier ?? 1]}</Pill>
-          {Number(c.credit_days) > 0 ? `${c.credit_days} dias de credito` : "de contado"}
+          {Number(c.overdue) > 0.005 ? (
+            <Pill tone="danger">con vencido</Pill>
+          ) : Number(c.balance_due) > 0.005 ? (
+            <Pill tone="warning">debe</Pill>
+          ) : (
+            <Pill tone="success">al dia</Pill>
+          )}
+        </>
+      }
+      subtitulo={Number(c.credit_days) > 0 ? `${c.credit_days} dias de credito` : "de contado"}
+      avatar={
+        <span
+          className="w-11 h-11 rounded-full text-white text-[14px] font-semibold flex items-center justify-center shrink-0 print:hidden"
+          style={{ background: colorDe(c.name) }}
+        >
+          {iniciales(c.name)}
         </span>
       }
-      icono={Users}
-      ancho="max-w-3xl"
+      ancho="w-[600px]"
       onClose={onClose}
       pie={
         <>
@@ -572,7 +671,7 @@ function FichaCliente({
         </>
       }
     >
-      <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[13px] mb-4">
+      <div className="grid grid-cols-1 gap-y-0.5 text-[13px] mb-4">
         {(
           [
             ["RIF / Cedula", c.tax_id],
@@ -584,13 +683,13 @@ function FichaCliente({
           ] as [string, string | null][]
         ).map(([k, v]) => (
           <div key={k} className="flex gap-2 border-b border-gray-50 py-1">
-            <span className="w-32 shrink-0 text-gray-400">{k}</span>
+            <span className="w-36 shrink-0 text-gray-400">{k}</span>
             <span className="text-gray-800 min-w-0 truncate">{v || "—"}</span>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-4 gap-2 mb-4">
+      <div className="grid grid-cols-2 gap-2 mb-4">
         {[
           { k: "Facturado", v: money(cuenta?.total ?? 0), t: "text-gray-900" },
           { k: "Abonado", v: money(cuenta?.abonado ?? 0), t: "text-emerald-700" },
@@ -657,7 +756,7 @@ function FichaCliente({
           <MapPin size={12} /> {[c.fiscal_address, c.city, c.state].filter(Boolean).join(", ")}
         </p>
       )}
-    </Ventana>
+    </Lateral>
   );
 }
 
