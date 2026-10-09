@@ -369,59 +369,56 @@ export default function PedidosPage() {
   }
 
   return (
-    <main className="p-6 max-w-[1100px]">
-      {/* ---------- barra de contexto ---------- */}
-      <div className="flex items-center gap-2.5 mb-3">
-        <h1 className="text-2xl font-semibold text-gray-900">Pedidos</h1>
-        {data && (
-          <span className="text-sm text-gray-500">
-            {num(data.espera_unidades)} uds esperadas por {data.espera_notas} notas ·{" "}
-            {num(data.reponer_unidades)} para reponer · {num(data.ya_pedido_unidades)} ya
-            pedidas
-          </span>
-        )}
+    <main className="p-6 max-w-[1240px]">
+      {/* ---------- encabezado ---------- */}
+      <div className="mb-1">
+        <h1 className="text-[24px] font-semibold text-gray-900 tracking-tight">Pedidos</h1>
+        <p className="text-[13px] text-gray-500">
+          {data
+            ? `${num(data.espera_unidades)} unidades esperadas por ${data.espera_notas} notas · ${num(
+                data.reponer_unidades
+              )} para reponer · ${num(data.ya_pedido_unidades)} ya pedidas`
+            : "Lo que hay que pedirle a cada proveedor"}
+        </p>
       </div>
 
       {error && (
         <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex">
           {error}
-          <button onClick={() => setError(null)} className="ml-auto text-red-500">
-            ×
+          <button onClick={() => setError(null)} className="ml-auto text-red-500" aria-label="Cerrar">
+            <X size={15} />
           </button>
         </div>
       )}
 
-      <div className="flex gap-2 mb-3">
-        <button
-          onClick={() => setTab("pedir")}
-          className={`px-3 py-1.5 rounded-lg text-sm ${
-            tab === "pedir"
-              ? "bg-gray-900 text-white"
-              : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-          }`}
-        >
-          Por pedir ({lineas.length})
-        </button>
-        <button
-          onClick={() => setTab("pedidos")}
-          className={`px-3 py-1.5 rounded-lg text-sm ${
-            tab === "pedidos"
-              ? "bg-gray-900 text-white"
-              : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-          }`}
-        >
-          Pedidos hechos ({pedidos.length})
-        </button>
-        <button
-          onClick={() => setTab("historial")}
-          className={`px-3 py-1.5 rounded-lg text-sm ${
-            tab === "historial"
-              ? "bg-gray-900 text-white"
-              : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-          }`}
-        >
-          Historial
-        </button>
+      {/* ---------- pestañas ---------- */}
+      <div className="flex gap-1 border-b border-gray-200 mt-3 mb-4">
+        {(
+          [
+            ["pedir", "Por pedir", lineas.length],
+            ["pedidos", "Pedidos hechos", pedidos.length],
+            ["historial", "Historial", null],
+          ] as const
+        ).map(([k, l, n]) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={`h-10 px-2.5 -mb-px flex items-center gap-2 text-[13.5px] border-b-2 whitespace-nowrap transition-colors ${
+              tab === k ? "border-brand-700 text-gray-900 font-medium" : "border-transparent text-gray-500 hover:text-gray-900"
+            }`}
+          >
+            {l}
+            {n !== null && (
+              <span
+                className={`min-w-[22px] h-[19px] px-1.5 rounded-full text-[11px] flex items-center justify-center ${
+                  tab === k ? "bg-brand-50 text-brand-700" : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                {n}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       {tab === "historial" && <Historial />}
@@ -526,7 +523,7 @@ export default function PedidosPage() {
               <p className="text-xs text-gray-500 max-w-md mx-auto">
                 Aqui cae lo que tus clientes esperan (productos bajo pedido) y lo que bajo
                 del minimo. Si nunca ves nada, revisa en{" "}
-                <Link href="/inventario" className="text-indigo-600 hover:underline">
+                <Link href="/inventario" className="text-brand-700 hover:underline">
                   Inventario
                 </Link>{" "}
                 que tengas productos marcados bajo pedido y minimos puestos.
@@ -565,7 +562,7 @@ export default function PedidosPage() {
                       return n;
                     })
                   }
-                  className="ml-auto text-[11px] text-indigo-600 hover:underline"
+                  className="ml-auto text-[11px] text-brand-700 hover:underline"
                 >
                   seleccionar todo
                 </button>
@@ -578,7 +575,7 @@ export default function PedidosPage() {
                   <div key={l.product_id}>
                     <div
                       className={`flex gap-2.5 px-3.5 py-[7px] border-b border-gray-100 text-[12.5px] items-center ${
-                        marcada ? "bg-indigo-50/60" : l.pedido ? "opacity-60" : ""
+                        marcada ? "bg-brand-50/60" : l.pedido ? "opacity-60" : ""
                       }`}
                     >
                       <input
@@ -619,7 +616,7 @@ export default function PedidosPage() {
                             onChange={(e) =>
                               setCant((p) => ({ ...p, [l.product_id]: e.target.value }))
                             }
-                            className="w-11 h-6 px-1.5 border border-indigo-300 rounded text-[12px] text-right"
+                            className="w-11 h-6 px-1.5 border border-brand-300 rounded text-[12px] text-right"
                           />
                         ) : (
                           num(l.cantidad)
@@ -659,7 +656,7 @@ export default function PedidosPage() {
                     </div>
 
                     {marcada && l.notas.length > 0 && (
-                      <div className="pl-[118px] pr-3.5 py-1 border-b border-gray-50 bg-indigo-50/30">
+                      <div className="pl-[118px] pr-3.5 py-1 border-b border-gray-50 bg-brand-50/30">
                         {l.notas.map((n) => (
                           <span
                             key={n.note_id}
@@ -667,7 +664,7 @@ export default function PedidosPage() {
                           >
                             <Link
                               href={`/notas/nueva?id=${n.note_id}`}
-                              className="text-indigo-600 hover:underline"
+                              className="text-brand-700 hover:underline"
                             >
                               nota {n.sequence_number}
                             </Link>
@@ -696,7 +693,7 @@ export default function PedidosPage() {
           {data && (
             <div className="flex items-center gap-4 px-3.5 py-2 border-t border-gray-300 bg-gray-50 text-[11.5px]">
               {seleccionadas.length > 0 ? (
-                <span className="text-indigo-700">
+                <span className="text-brand-700">
                   {seleccionadas.length} lineas · {num(unidadesSel)} unidades
                   <button
                     onClick={() => {
@@ -804,7 +801,7 @@ export default function PedidosPage() {
                 onClick={() => setDetalleId(p.id)}
                 className="w-full flex gap-2.5 px-3.5 py-2 border-b border-gray-100 text-[12.5px] text-left hover:bg-gray-50"
               >
-                <span className="w-16 font-mono text-[11px] text-indigo-600">
+                <span className="w-16 font-mono text-[11px] text-brand-700">
                   P-{String(p.numero).padStart(4, "0")}
                 </span>
                 <span className="w-20 text-gray-500">{p.order_date}</span>
@@ -1386,11 +1383,11 @@ function AsignarProveedor({
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-gray-950/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl w-full max-w-md p-5"
+        className="bg-white rounded-2xl shadow-pop border border-gray-200/80 w-full max-w-md p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-base font-semibold text-gray-900 mb-1">
@@ -1416,7 +1413,7 @@ function AsignarProveedor({
         <div className="flex gap-2">
           <button
             onClick={guardar}
-            className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-700"
+            className="px-4 py-2 rounded-lg bg-brand-700 text-white text-sm font-medium hover:bg-brand-800 shadow-sm"
           >
             Asignar
           </button>
@@ -1692,7 +1689,7 @@ function DetallePedido({
                 onChange={(ev) =>
                   setCant((p) => ({ ...p, [i.id]: ev.target.value }))
                 }
-                className="w-12 h-6 px-1.5 border border-indigo-300 rounded text-[12px] text-right"
+                className="w-12 h-6 px-1.5 border border-brand-300 rounded text-[12px] text-right"
               />
             ) : (
               num(i.quantity)
@@ -1743,11 +1740,11 @@ function DetallePedido({
 
       {verFact && (
         <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-gray-950/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4"
           onClick={() => setVerFact(false)}
         >
           <div
-            className="bg-white rounded-xl w-full max-w-md p-5 max-h-[80vh] overflow-y-auto"
+            className="bg-white rounded-2xl shadow-pop border border-gray-200/80 w-full max-w-md p-5 max-h-[80vh] overflow-y-auto"
             onClick={(ev) => ev.stopPropagation()}
           >
             <h2 className="text-base font-semibold text-gray-900 mb-1">
@@ -1760,7 +1757,7 @@ function DetallePedido({
             {facturas.length === 0 && (
               <p className="text-sm text-gray-500 mb-3">
                 No hay facturas de este proveedor todavia. Registrala en{" "}
-                <Link href="/compras" className="text-indigo-600 hover:underline">
+                <Link href="/compras" className="text-brand-700 hover:underline">
                   Compras
                 </Link>
                 .
@@ -1770,7 +1767,7 @@ function DetallePedido({
               <button
                 key={f.id}
                 onClick={() => enlazar(f.id)}
-                className="w-full flex gap-3 px-2.5 py-2 rounded-lg hover:bg-indigo-50 text-[13px] text-left"
+                className="w-full flex gap-3 px-2.5 py-2 rounded-lg hover:bg-brand-50 text-[13px] text-left"
               >
                 <span className="font-mono text-[11px] text-gray-500 w-20 truncate">
                   {f.numero}
@@ -1894,11 +1891,11 @@ function RecibirModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-gray-950/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-2xl shadow-pop border border-gray-200/80 w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-baseline justify-between mb-1">
@@ -1938,7 +1935,7 @@ function RecibirModal({
             <button
               onClick={proponer}
               disabled={busy}
-              className="h-9 px-4 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-700 disabled:opacity-50"
+              className="h-9 px-4 rounded-lg bg-brand-700 text-white text-sm font-medium hover:bg-brand-800 shadow-sm disabled:opacity-50"
             >
               {busy ? "..." : "Ver el reparto"}
             </button>
@@ -1975,7 +1972,7 @@ function RecibirModal({
                 >
                   <Link
                     href={`/notas/nueva?id=${e.note_id}`}
-                    className="w-12 text-indigo-600 hover:underline font-mono text-[11px]"
+                    className="w-12 text-brand-700 hover:underline font-mono text-[11px]"
                   >
                     {e.sequence_number}
                   </Link>
@@ -1988,7 +1985,7 @@ function RecibirModal({
                       onChange={(ev) =>
                         setRepartos((p) => ({ ...p, [e.note_id]: ev.target.value }))
                       }
-                      className="w-16 h-7 px-2 border border-indigo-300 rounded-lg text-sm text-right"
+                      className="w-16 h-7 px-2 border border-brand-300 rounded-lg text-sm text-right"
                     />
                   </span>
                   <span className="w-20">
@@ -2024,7 +2021,7 @@ function RecibirModal({
               <button
                 onClick={guardar}
                 disabled={busy || sobrepasa}
-                className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-700 disabled:opacity-40"
+                className="px-4 py-2 rounded-lg bg-brand-700 text-white text-sm font-medium hover:bg-brand-800 shadow-sm disabled:opacity-40"
               >
                 {busy ? "Guardando..." : "Guardar recepcion"}
               </button>
