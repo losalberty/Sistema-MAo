@@ -14,8 +14,14 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
       <body className="font-sans">
+        {/* modo oscuro: se aplica antes de pintar para que no haya parpadeo */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: "try{if(localStorage.getItem('tema')==='oscuro')document.documentElement.classList.add('dark')}catch(e){}",
+          }}
+        />
         <AuthGate>
           <Shell>{children}</Shell>
         </AuthGate>
