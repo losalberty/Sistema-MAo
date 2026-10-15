@@ -6,11 +6,14 @@ import {
   ArrowRight,
   Check,
   ClipboardPaste,
+  FileSpreadsheet,
   FileText,
   FileUp,
   Link2,
+  PenLine,
   Search,
   Sparkles,
+  Tag,
   UserCheck,
   UserPlus,
   X,
@@ -18,7 +21,20 @@ import {
 import { supabase } from "@/lib/supabase";
 import { NumInput, notify } from "@/components/ui";
 import { colorDe, iniciales } from "@/components/Paleta";
-import { interpretarPegado, leerPdf, type DocLeido, type LineaPegada, type Orden } from "@/components/leerPedido";
+import {
+  analizarLista,
+  buscarEnLista,
+  interpretarPegado,
+  itemsDeLista,
+  leerPdf,
+  mapaDeLista,
+  type DocLeido,
+  type LineaPegada,
+  type ListaPrecios,
+  type MapaLista,
+  type Orden,
+} from "@/components/leerPedido";
+import { leerFilas } from "@/components/Excel";
 
 /* ============================================================
    Importar un pedido a la nota:
@@ -86,7 +102,11 @@ type Fila = {
   elegido: Hallazgo | null;
   incluir: boolean;
   manual: boolean; // agregar como producto fuera del catalogo
+  descEditada: string | null; // lo que escribas a mano en un producto manual
+  precioEditado: number | null;
 };
+
+type ListaCargada = { nombre: string; datos: ListaPrecios; col: number };
 
 const TARIFAS: Record<number, string> = { 1: "Contado", 2: "Credito", 3: "Tarifa 3", 4: "Tarifa 4" };
 
@@ -157,6 +177,13 @@ export default function ImportarPedido({
 
   const [filas, setFilas] = useState<Fila[]>([]);
   const [buscandoEn, setBuscandoEn] = useState<string | null>(null);
+  const [faltaDesc, setFaltaDesc] = useState(false);
+
+  // lista de precios especial del cliente (solo en Pegar pedido)
+  const listaRef = useRef<HTMLInputElement>(null);
+  const [lista, setLista] = useState<ListaCargada | null>(null);
+  const [leyendoLista, setLeyendoLista] = useState(false);
+  const mapaLista = useMemo(() => (lista ? mapaDeLista(itemsDeLista(lista.datos, lista.col)) : null), [lista]);
 
   // Esc cierra (si no hay otra ventana encima)
   useEffect(() => {
@@ -225,6 +252,8 @@ export default function ImportarPedido({
             // lo que no esta en el catalogo igual viene en el documento: se agrega como manual
             incluir: true,
             manual: !seguro && !(op[0]?.tipo === "descripcion"),
+            descEditada: null,
+            precioEditado: null,
           };
         })
       );
@@ -260,7 +289,7 @@ export default function ImportarPedido({
   /* ---------- texto pegado ---------- */
   const lineasPegadas = useMemo(() => interpretarPegado(texto), [texto]);
 
-  async function revisarPegado() {
+  async function revisarPegado(m: MapaLista | null = mapaLista) {
     if (lineasPegadas.length === 0) return;
     setError(null);
     setPaso("leyendo");
@@ -280,8 +309,10 @@ export default function ImportarPedido({
         const interp = o === "A" ? l.A : l.B;
         if (!interp) return null;
         for (let n = 0; n < interp.codigos.length; n++) {
-          const op = mapa.get(`${l.i}|${o}|${n}`);
-          if (op && op.length) return { op, interp };
+          const op = mapa.get(`${l.i}|${o}|${n}`) ?? [];
+          // cuenta si esta en el catalogo o en la lista especial
+          const li = buscarEnLista(m, interp.codigos[n]);
+          if (op.length || li) return { op, interp, n, li };
         }
         return null;
       };
@@ -310,22 +341,27 @@ export default function ImportarPedido({
         else usadosB++;
         const r = o === "A" ? a : b;
         const interp = (o === "A" ? l.A : l.B) ?? l.A ?? l.B;
-        const op = r?.op ?? mapa.get(`${l.i}|D`) ?? [];
-        const seguro = r ? r.op[0] : null;
+        const seguro = r && r.op.length ? r.op[0] : null;
+        const li = r?.li ?? null;
+        // si no esta en el catalogo pero si en la lista: entra como manual con lo de la lista
+        const op = r?.op.length ? r.op : li ? [] : mapa.get(`${l.i}|D`) ?? [];
         return {
           key: `P${l.i}`,
-          leidoCode: interp?.codigos[0] ?? l.texto,
-          leidoDesc: "",
+          leidoCode: r ? r.interp.codigos[r.n] : interp?.codigos[0] ?? l.texto,
+          leidoDesc: li?.desc ?? "",
           leidoPrecio: null,
           texto: l.texto,
           qty: interp?.qty ?? 1,
           opciones: op,
           elegido: seguro,
-          incluir: !!seguro,
-          manual: false,
+          incluir: !!seguro || !!li,
+          manual: !seguro && !!li,
+          descEditada: null,
+          precioEditado: null,
         };
       });
       setOrdenUsado(usadosA && usadosB ? "mixto" : usadosB > usadosA ? "cantidad_codigo" : "codigo_cantidad");
+      setFaltaDesc(false);
       setFilas(nuevas);
       setDoc(null);
       setPaso("revision");
@@ -333,6 +369,35 @@ export default function ImportarPedido({
       setPaso("entrada");
       setError(e instanceof Error ? e.message : "No se pudo revisar el pedido.");
     }
+  }
+
+  /* ---------- lista especial ---------- */
+  async function abrirLista(file: File) {
+    setError(null);
+    setLeyendoLista(true);
+    try {
+      const datos = analizarLista(await leerFilas(file));
+      const n = datos ? itemsDeLista(datos, datos.sugerida).length : 0;
+      if (!datos || n === 0) {
+        setError(
+          "No encontre codigos con precios en esa lista. Revisa que tenga una columna de codigo y otra de precio."
+        );
+        return;
+      }
+      const nueva = { nombre: file.name, datos, col: datos.sugerida };
+      setLista(nueva);
+      notify.ok(`Lista cargada: ${n} productos con precio especial`);
+      if (paso === "revision") await revisarPegado(mapaDeLista(itemsDeLista(datos, datos.sugerida)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo abrir la lista.");
+    } finally {
+      setLeyendoLista(false);
+    }
+  }
+
+  async function quitarLista() {
+    setLista(null);
+    if (paso === "revision") await revisarPegado(null);
   }
 
   /* ---------- edicion en la revision ---------- */
@@ -345,11 +410,22 @@ export default function ImportarPedido({
     setBuscandoEn(null);
   }
 
-  const precioDe = (f: Fila) => {
-    if (doc && usarPreciosDoc && f.leidoPrecio !== null) return f.leidoPrecio;
-    if (f.elegido && !f.manual) return precioTarifa(f.elegido, tier);
-    return f.leidoPrecio ?? 0;
+  const listaDe = (f: Fila) =>
+    mapaLista ? buscarEnLista(mapaLista, f.leidoCode) ?? (f.elegido ? buscarEnLista(mapaLista, f.elegido.code) : null) : null;
+
+  // de donde sale el precio: lo que escribas > lista especial > documento > tu tarifa
+  const precioInfo = (f: Fila): { v: number; origen: "editado" | "lista" | "doc" | "tarifa" | "leido" } => {
+    if (f.manual && f.precioEditado !== null) return { v: f.precioEditado, origen: "editado" };
+    const li = listaDe(f);
+    if (li) return { v: li.precio, origen: "lista" };
+    if (doc && usarPreciosDoc && f.leidoPrecio !== null) return { v: f.leidoPrecio, origen: "doc" };
+    if (f.elegido && !f.manual) return { v: precioTarifa(f.elegido, tier), origen: "tarifa" };
+    return { v: f.leidoPrecio ?? 0, origen: "leido" };
   };
+  const precioDe = (f: Fila) => precioInfo(f).v;
+
+  // descripcion de un producto manual
+  const descDe = (f: Fila) => f.descEditada ?? (listaDe(f)?.desc || f.leidoDesc || (doc ? f.texto : ""));
 
   const resumen = useMemo(() => {
     const incl = filas.filter((f) => f.incluir && (f.elegido || f.manual));
@@ -358,33 +434,121 @@ export default function ImportarPedido({
       catalogo: incl.filter((f) => f.elegido && !f.manual).length,
       manuales: incl.filter((f) => f.manual).length,
       dudosos: filas.filter((f) => !f.elegido && !f.manual).length,
+      deLista: incl.filter((f) => precioInfo(f).origen === "lista").length,
       unidades: incl.reduce((s, f) => s + f.qty, 0),
       total: incl.reduce((s, f) => s + f.qty * precioDe(f), 0),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filas, usarPreciosDoc, tier, doc]);
+  }, [filas, usarPreciosDoc, tier, doc, mapaLista]);
 
   const sumaLeida = doc ? doc.lineas.reduce((s, l) => s + (l.total ?? 0), 0) : 0;
 
   function confirmar() {
-    const lineas: LineaImportada[] = filas
-      .filter((f) => f.incluir && (f.elegido || f.manual))
-      .map((f) => ({
-        producto: f.manual ? null : f.elegido,
-        code: f.elegido && !f.manual ? f.elegido.code : f.leidoCode,
-        desc: f.elegido && !f.manual ? f.elegido.description : f.leidoDesc || f.texto,
-        qty: f.qty,
-        precio: doc && usarPreciosDoc && f.leidoPrecio !== null ? f.leidoPrecio : f.manual ? f.leidoPrecio ?? 0 : null,
-      }));
-    if (lineas.length === 0) {
+    const marcadas = filas.filter((f) => f.incluir && (f.elegido || f.manual));
+    if (marcadas.length === 0) {
       notify.aviso("No hay nada marcado para agregar");
       return;
     }
+    const sinDesc = marcadas.filter((f) => f.manual && !descDe(f).trim()).length;
+    if (sinDesc) {
+      setFaltaDesc(true);
+      notify.aviso(
+        sinDesc === 1
+          ? "Falta escribir la descripcion de 1 producto manual (marcado en rojo)"
+          : `Falta escribir la descripcion de ${sinDesc} productos manuales (marcados en rojo)`
+      );
+      return;
+    }
+    const lineas: LineaImportada[] = marcadas.map((f) => {
+      const pi = precioInfo(f);
+      return {
+        producto: f.manual ? null : f.elegido,
+        code: f.elegido && !f.manual ? f.elegido.code : f.leidoCode,
+        desc: f.elegido && !f.manual ? f.elegido.description : descDe(f).trim(),
+        qty: f.qty,
+        // null = la nota usa la tarifa del cliente
+        precio: !f.manual && pi.origen === "tarifa" ? null : pi.v,
+      };
+    });
     onAgregar({
       lineas,
       cliente: doc && usarCliente ? cliente : null,
       clienteRapido: doc && !cliente && usarRapido ? doc.cliente.nombre : null,
     });
+  }
+
+  /* ---------- tarjeta de la lista especial ---------- */
+  function bloqueLista() {
+    if (!lista)
+      return (
+        <div className="flex items-center gap-3 rounded-xl border border-dashed border-gray-300 px-3 py-2.5">
+          <span className="w-8 h-8 rounded-lg bg-violet-50 text-violet-700 flex items-center justify-center shrink-0">
+            <Tag size={16} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-medium text-gray-900">¿Este cliente tiene precios especiales?</p>
+            <p className="text-[11.5px] text-gray-500">
+              Sube su lista en Excel y el pedido toma esos precios, codigos y descripciones.
+            </p>
+          </div>
+          <button
+            onClick={() => listaRef.current?.click()}
+            disabled={leyendoLista}
+            className="h-8 px-3 rounded-lg text-[12.5px] font-medium border border-violet-100 bg-white text-violet-700 hover:border-violet-300 inline-flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50"
+          >
+            {leyendoLista ? (
+              <span className="w-3.5 h-3.5 rounded-full border-2 border-violet-100 border-t-violet-700 animate-spin" />
+            ) : (
+              <FileSpreadsheet size={14} />
+            )}
+            Subir lista especial
+          </button>
+        </div>
+      );
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-violet-100 bg-violet-50 px-3 py-2.5 flex-wrap">
+        <span className="w-8 h-8 rounded-lg bg-violet-600 text-white flex items-center justify-center shrink-0">
+          <Tag size={16} />
+        </span>
+        <div className="flex-1 min-w-[180px]">
+          <p className="text-[13px] font-medium text-gray-900 truncate" title={lista.nombre}>
+            {lista.nombre}
+          </p>
+          <p className="text-[11.5px] text-violet-800">
+            {mapaLista?.total ?? 0} productos con precio especial · estos precios mandan sobre tu tarifa
+          </p>
+        </div>
+        {lista.datos.columnas.length > 1 && (
+          <label className="text-[12px] text-gray-600 flex items-center gap-1.5 whitespace-nowrap">
+            Precio de
+            <select
+              value={lista.col}
+              onChange={(e) => setLista({ ...lista, col: Number(e.target.value) })}
+              className="h-7 px-1.5 border border-violet-100 rounded-md text-[12px] bg-white"
+            >
+              {lista.datos.columnas.map((c) => (
+                <option key={c.idx} value={c.idx}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <button
+          onClick={() => listaRef.current?.click()}
+          disabled={leyendoLista}
+          className="h-7 px-2 rounded-md text-[12px] text-violet-700 hover:bg-white whitespace-nowrap"
+        >
+          Cambiar
+        </button>
+        <button
+          onClick={quitarLista}
+          className="h-7 px-2 rounded-md text-[12px] text-gray-500 hover:bg-white hover:text-red-600 whitespace-nowrap"
+        >
+          Quitar
+        </button>
+      </div>
+    );
   }
 
   const titulo = modo === "pdf" ? "Importar pedido desde un PDF" : "Pegar pedido";
@@ -403,6 +567,17 @@ export default function ImportarPedido({
         className={`w-full ${paso === "revision" ? "max-w-6xl h-[88vh]" : "max-w-2xl"} flex flex-col rounded-2xl bg-white shadow-pop border border-gray-200/80 overflow-hidden transition-[max-width] duration-200`}
         onMouseDown={(e) => e.stopPropagation()}
       >
+        <input
+          ref={listaRef}
+          type="file"
+          accept=".xlsx,.xls,.xlsm,.ods,.csv,.txt"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) abrirLista(f);
+          }}
+        />
         {/* ---------- cabecera ---------- */}
         <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100">
           <span className="w-9 h-9 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
@@ -534,7 +709,7 @@ export default function ImportarPedido({
               autoFocus
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
-              rows={12}
+              rows={10}
               spellCheck={false}
               placeholder={"Ejemplos (cualquiera de las dos formas):\nGUN-93    3\nSET-12    2\n\n3 x 88107\n5 und SET-75"}
               className="w-full p-3 border border-gray-300 rounded-xl text-[13px] font-mono leading-relaxed bg-white focus:border-brand-500 resize-none"
@@ -543,6 +718,7 @@ export default function ImportarPedido({
               Sirve separado por espacios, tabulaciones (copiado de Excel), comas o punto y coma. Si una linea solo trae el
               codigo, se toma 1 unidad. En "Lo detecto solo" el sistema mira cual dato existe en tu catalogo.
             </p>
+            <div className="mt-3">{bloqueLista()}</div>
           </div>
         )}
 
@@ -564,7 +740,7 @@ export default function ImportarPedido({
             </button>
             {modo === "pegar" ? (
               <button
-                onClick={revisarPegado}
+                onClick={() => revisarPegado()}
                 disabled={lineasPegadas.length === 0}
                 className="h-9 px-4 rounded-[9px] inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-gradient-to-b from-brand-600 to-brand-800 border border-brand-900 shadow-sm hover:brightness-110 disabled:opacity-40"
               >
@@ -688,6 +864,9 @@ export default function ImportarPedido({
                 </div>
               )}
 
+              {/* lista especial (solo pegar) */}
+              {!doc && modo === "pegar" && <div className="px-5 pt-4">{bloqueLista()}</div>}
+
               {/* tabla */}
               <div className="px-5 pt-4 pb-2">
                 <div className="flex gap-3 items-center px-3 h-9 text-[11px] font-medium text-gray-400 bg-gray-50 rounded-t-xl border border-gray-200">
@@ -703,7 +882,8 @@ export default function ImportarPedido({
                   {filas.map((f) => {
                     const ok = !!f.elegido && !f.manual;
                     const sugerencia = !f.elegido && f.opciones[0]?.tipo === "descripcion" ? f.opciones[0] : null;
-                    const precio = precioDe(f);
+                    const info = precioInfo(f);
+                    const precio = info.v;
                     const sistema = f.elegido ? precioTarifa(f.elegido, tier) : null;
                     return (
                       <div
@@ -782,14 +962,12 @@ export default function ImportarPedido({
                                 >
                                   Buscar otro
                                 </button>
-                                {doc && (
-                                  <button
-                                    onClick={() => cambiar(f.key, { manual: true, incluir: true })}
-                                    className="h-6 px-2 rounded-md text-[11.5px] text-gray-600 hover:bg-white"
-                                  >
-                                    Agregar como manual
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => cambiar(f.key, { manual: true, incluir: true })}
+                                  className="h-6 px-2 rounded-md text-[11.5px] text-gray-600 hover:bg-white"
+                                >
+                                  Agregar como manual
+                                </button>
                               </div>
                             </div>
                           )}
@@ -805,14 +983,38 @@ export default function ImportarPedido({
                               >
                                 <Search size={11} /> Buscarlo
                               </button>
+                              <button
+                                onClick={() => cambiar(f.key, { manual: true, incluir: true })}
+                                className="h-6 px-2 rounded-md text-[11.5px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300 inline-flex items-center gap-1"
+                              >
+                                <PenLine size={11} /> Agregar como manual
+                              </button>
                             </div>
                           )}
 
+                          {f.manual && (
+                            <input
+                              value={descDe(f)}
+                              onChange={(e) => cambiar(f.key, { descEditada: e.target.value })}
+                              placeholder="Escribe la descripcion del producto"
+                              aria-label="Descripcion del producto manual"
+                              className={`w-full h-8 px-2.5 mb-1 rounded-lg border text-[13px] bg-white ${
+                                faltaDesc && f.incluir && !descDe(f).trim()
+                                  ? "border-red-300 ring-2 ring-red-100"
+                                  : "border-gray-200 focus:border-brand-500"
+                              }`}
+                            />
+                          )}
                           {f.manual && (
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-[11px] px-1.5 py-px rounded-md bg-amber-50 text-amber-800">
                                 fuera del catalogo · entra como producto manual
                               </span>
+                              {listaDe(f) && (
+                                <span className="text-[11px] px-1.5 py-px rounded-md bg-violet-50 text-violet-700">
+                                  de la lista especial
+                                </span>
+                              )}
                               <button
                                 onClick={() => setBuscandoEn(f.key)}
                                 className="text-[11.5px] text-brand-700 hover:underline inline-flex items-center gap-1"
@@ -841,7 +1043,24 @@ export default function ImportarPedido({
                           />
                         </div>
                         <div className="w-24 shrink-0 text-right">
-                          <p className="text-[13px] text-gray-900">{money(precio)}</p>
+                          {f.manual ? (
+                            <NumInput
+                              value={precio}
+                              onChange={(n) => cambiar(f.key, { precioEditado: n })}
+                              className="w-full h-8 px-2 border border-gray-200 rounded-lg text-[13px] text-right bg-white"
+                              ariaLabel="Precio del producto manual"
+                            />
+                          ) : (
+                            <p className={`text-[13px] ${info.origen === "lista" ? "text-violet-700 font-medium" : "text-gray-900"}`}>
+                              {money(precio)}
+                            </p>
+                          )}
+                          {info.origen === "lista" && !f.manual && (
+                            <p className="text-[10.5px] text-violet-700">
+                              lista especial
+                              {sistema !== null && Math.abs(sistema - precio) > 0.005 ? ` · antes ${money(sistema)}` : ""}
+                            </p>
+                          )}
                           {doc && usarPreciosDoc && sistema !== null && f.leidoPrecio !== null && Math.abs(sistema - f.leidoPrecio) > 0.005 && (
                             <p className="text-[10.5px] text-gray-400">sistema {money(sistema)}</p>
                           )}
@@ -868,6 +1087,11 @@ export default function ImportarPedido({
                 {resumen.manuales > 0 && (
                   <span className="h-6 px-2 rounded-full bg-amber-50 text-amber-800 inline-flex items-center">
                     {resumen.manuales} manual{resumen.manuales === 1 ? "" : "es"}
+                  </span>
+                )}
+                {resumen.deLista > 0 && (
+                  <span className="h-6 px-2 rounded-full bg-violet-50 text-violet-700 inline-flex items-center gap-1">
+                    <Tag size={11} /> {resumen.deLista} con precio de la lista
                   </span>
                 )}
                 {resumen.dudosos > 0 && (
