@@ -24,7 +24,9 @@ import { colorDe, iniciales } from "@/components/Paleta";
 import {
   analizarLista,
   buscarEnLista,
+  descripcionDe,
   interpretarPegado,
+  palabrasDe,
   itemsDeLista,
   leerPdf,
   mapaDeLista,
@@ -60,7 +62,13 @@ export type ProductoImp = {
   supply_type: string | null;
 };
 
-type Hallazgo = ProductoImp & { k: string; tipo: "exacta" | "prefijo" | "descripcion" };
+type Hallazgo = ProductoImp & { k: string; tipo: "exacta" | "prefijo" | "descripcion" | "parecido" };
+
+// sugerencias por descripcion: nunca se agregan solas
+const esSugerencia = (h?: Hallazgo | null) => !!h && (h.tipo === "descripcion" || h.tipo === "parecido");
+
+// la otra forma de leer una linea dudosa ("5 369": ¿5 del 369 o 369 del 5?)
+type Alterna = { code: string; qty: number; opciones: Hallazgo[]; elegido: Hallazgo | null };
 
 export type ClienteImp = {
   id: string;
@@ -104,6 +112,7 @@ type Fila = {
   manual: boolean; // agregar como producto fuera del catalogo
   descEditada: string | null; // lo que escribas a mano en un producto manual
   precioEditado: number | null;
+  alterna: Alterna | null;
 };
 
 type ListaCargada = { nombre: string; datos: ListaPrecios; col: number };
@@ -140,7 +149,8 @@ function Existencia({ p, qty }: { p: ProductoImp; qty: number }) {
 const TIPO_TXT: Record<string, { l: string; c: string }> = {
   exacta: { l: "codigo exacto", c: "text-emerald-700" },
   prefijo: { l: "codigo cortado en el PDF", c: "text-sky-700" },
-  descripcion: { l: "parecido por descripcion · revisa", c: "text-amber-700" },
+  descripcion: { l: "elegido por descripcion", c: "text-amber-700" },
+  parecido: { l: "elegido por parecido", c: "text-amber-700" },
 };
 
 export default function ImportarPedido({
@@ -239,7 +249,7 @@ export default function ImportarPedido({
       setFilas(
         d.lineas.map((l) => {
           const op = mapa.get(`L${l.i}`) ?? [];
-          const seguro = op.length > 0 && op[0].tipo !== "descripcion" ? op[0] : null;
+          const seguro = op.length > 0 && !esSugerencia(op[0]) ? op[0] : null;
           return {
             key: `L${l.i}`,
             leidoCode: l.code,
@@ -251,14 +261,15 @@ export default function ImportarPedido({
             elegido: seguro,
             // lo que no esta en el catalogo igual viene en el documento: se agrega como manual
             incluir: true,
-            manual: !seguro && !(op[0]?.tipo === "descripcion"),
+            manual: !seguro && !esSugerencia(op[0]),
             descEditada: null,
             precioEditado: null,
+            alterna: null,
           };
         })
       );
       // si hay sugerencia por descripcion, se deja sin incluir hasta que la confirmes
-      setFilas((fs) => fs.map((f) => (!f.elegido && f.opciones[0]?.tipo === "descripcion" ? { ...f, incluir: false } : f)));
+      setFilas((fs) => fs.map((f) => (!f.elegido && esSugerencia(f.opciones[0]) ? { ...f, incluir: false } : f)));
       await buscarCliente(d);
       setPaso("revision");
     } catch (e) {
@@ -299,9 +310,9 @@ export default function ImportarPedido({
         for (const [o, interp] of [["A", l.A], ["B", l.B]] as const) {
           interp?.codigos.forEach((c, n) => items.push({ k: `${l.i}|${o}|${n}`, code: c, desc: "" }));
         }
-        // si ningun codigo existe, se intenta por descripcion con el texto sin numeros
-        const sinNumeros = l.texto.replace(/\b\d+([.,]\d+)?\b/g, " ").replace(/\s+/g, " ").trim();
-        if (sinNumeros.length >= 4) items.push({ k: `${l.i}|D`, code: "", desc: sinNumeros });
+        // si ningun codigo existe, se intenta por descripcion (la linea sin la cantidad)
+        const dsc = descripcionDe(l.texto);
+        if (dsc.length >= 4) items.push({ k: `${l.i}|D`, code: "", desc: dsc });
       }
       const mapa = await buscarEnCatalogo(items);
 
@@ -312,7 +323,7 @@ export default function ImportarPedido({
           const op = mapa.get(`${l.i}|${o}|${n}`) ?? [];
           // cuenta si esta en el catalogo o en la lista especial
           const li = buscarEnLista(m, interp.codigos[n]);
-          if (op.length || li) return { op, interp, n, li };
+          if (op.length || li) return { op, li, code: interp.codigos[n], qty: interp.qtys?.[n] ?? interp.qty };
         }
         return null;
       };
@@ -336,28 +347,40 @@ export default function ImportarPedido({
         let o: "A" | "B";
         if (orden === "codigo_cantidad") o = l.A ? "A" : "B";
         else if (orden === "cantidad_codigo") o = l.B ? "B" : "A";
-        else o = a && !b ? "A" : b && !a ? "B" : a && b ? mayoria : l[mayoria] ? mayoria : l.A ? "A" : "B";
+        else if (a && b) {
+          // las dos lecturas existen: si una cantidad es muy grande (369 unidades), gana la otra
+          o = a.qty !== b.qty && Math.max(a.qty, b.qty) >= 50 ? (a.qty < b.qty ? "A" : "B") : mayoria;
+        } else o = a ? "A" : b ? "B" : l[mayoria] ? mayoria : l.A ? "A" : "B";
         if (o === "A") usadosA++;
         else usadosB++;
         const r = o === "A" ? a : b;
+        const otro = o === "A" ? b : a;
         const interp = (o === "A" ? l.A : l.B) ?? l.A ?? l.B;
         const seguro = r && r.op.length ? r.op[0] : null;
         const li = r?.li ?? null;
         // si no esta en el catalogo pero si en la lista: entra como manual con lo de la lista
         const op = r?.op.length ? r.op : li ? [] : mapa.get(`${l.i}|D`) ?? [];
+        // linea dudosa: se puede leer de las dos formas y las dos existen
+        const alterna: Alterna | null =
+          orden === "auto" && r && otro && r.op.length && otro.op.length && (otro.op[0].id !== r.op[0].id || otro.qty !== r.qty)
+            ? { code: otro.code, qty: otro.qty, opciones: otro.op, elegido: otro.op[0] }
+            : null;
+        // sin codigo y con varias palabras: es una descripcion ("soporte de cardan x-17")
+        const esTexto = !r && palabrasDe(l.texto).length >= 3;
         return {
           key: `P${l.i}`,
-          leidoCode: r ? r.interp.codigos[r.n] : interp?.codigos[0] ?? l.texto,
-          leidoDesc: li?.desc ?? "",
+          leidoCode: r ? r.code : esTexto ? "" : interp?.codigos[0] ?? l.texto,
+          leidoDesc: li?.desc ?? (esTexto ? descripcionDe(l.texto) : ""),
           leidoPrecio: null,
           texto: l.texto,
-          qty: interp?.qty ?? 1,
+          qty: r ? r.qty : interp?.qty ?? 1,
           opciones: op,
           elegido: seguro,
           incluir: !!seguro || !!li,
           manual: !seguro && !!li,
           descEditada: null,
           precioEditado: null,
+          alterna,
         };
       });
       setOrdenUsado(usadosA && usadosB ? "mixto" : usadosB > usadosA ? "cantidad_codigo" : "codigo_cantidad");
@@ -410,6 +433,26 @@ export default function ImportarPedido({
     setBuscandoEn(null);
   }
 
+  // linea dudosa: cambia a la otra forma de leerla ("5 del 369" <-> "369 del 5")
+  function invertir(key: string) {
+    setFilas((fs) =>
+      fs.map((f) => {
+        if (f.key !== key || !f.alterna) return f;
+        const a = f.alterna;
+        return {
+          ...f,
+          leidoCode: a.code,
+          qty: a.qty,
+          opciones: a.opciones,
+          elegido: a.elegido,
+          incluir: !!a.elegido,
+          manual: false,
+          alterna: { code: f.leidoCode, qty: f.qty, opciones: f.opciones, elegido: f.elegido },
+        };
+      })
+    );
+  }
+
   const listaDe = (f: Fila) =>
     mapaLista ? buscarEnLista(mapaLista, f.leidoCode) ?? (f.elegido ? buscarEnLista(mapaLista, f.elegido.code) : null) : null;
 
@@ -434,6 +477,7 @@ export default function ImportarPedido({
       catalogo: incl.filter((f) => f.elegido && !f.manual).length,
       manuales: incl.filter((f) => f.manual).length,
       dudosos: filas.filter((f) => !f.elegido && !f.manual).length,
+      dosFormas: incl.filter((f) => f.alterna).length,
       deLista: incl.filter((f) => precioInfo(f).origen === "lista").length,
       unidades: incl.reduce((s, f) => s + f.qty, 0),
       total: incl.reduce((s, f) => s + f.qty * precioDe(f), 0),
@@ -881,7 +925,9 @@ export default function ImportarPedido({
                 <div className="border-x border-b border-gray-200 rounded-b-xl">
                   {filas.map((f) => {
                     const ok = !!f.elegido && !f.manual;
-                    const sugerencia = !f.elegido && f.opciones[0]?.tipo === "descripcion" ? f.opciones[0] : null;
+                    const sugeridas = !f.elegido ? f.opciones.filter((o) => esSugerencia(o)).slice(0, 3) : [];
+                    const sugerencia = sugeridas[0] ?? null;
+                    const todasLasPalabras = sugeridas.some((o) => o.tipo === "descripcion");
                     const info = precioInfo(f);
                     const precio = info.v;
                     const sistema = f.elegido ? precioTarifa(f.elegido, tier) : null;
@@ -901,7 +947,9 @@ export default function ImportarPedido({
                           aria-label="Incluir esta linea"
                         />
                         <div className={`w-[230px] shrink-0 ${!f.incluir ? "opacity-60" : ""}`}>
-                          <p className="font-mono text-[12px] text-gray-700 truncate">{f.leidoCode}</p>
+                          <p className="font-mono text-[12px] text-gray-700 truncate">
+                            {f.leidoCode || <span className="font-sans text-gray-400">sin codigo</span>}
+                          </p>
                           <p className="text-[11.5px] text-gray-400 truncate" title={f.leidoDesc || f.texto}>
                             {f.leidoDesc || (f.texto !== f.leidoCode ? f.texto : "")}
                           </p>
@@ -922,7 +970,16 @@ export default function ImportarPedido({
                                   <Check size={11} /> {TIPO_TXT[f.elegido.tipo].l}
                                 </span>
                                 <Existencia p={f.elegido} qty={f.qty} />
-                                {f.opciones.filter((o) => o.tipo !== "descripcion").length > 1 && (
+                                {f.alterna && (
+                                  <button
+                                    onClick={() => invertir(f.key)}
+                                    title={`Tambien puede ser ${f.alterna.qty} del ${f.alterna.code}`}
+                                    className="h-5 px-1.5 rounded-md text-[11px] bg-amber-50 text-amber-800 hover:bg-amber-100 inline-flex items-center gap-1"
+                                  >
+                                    <AlertTriangle size={11} /> ¿O son {f.alterna.qty} und. del {f.alterna.code}? Cambiar
+                                  </button>
+                                )}
+                                {f.opciones.filter((o) => !esSugerencia(o)).length > 1 && (
                                   <select
                                     value={f.elegido.id}
                                     onChange={(e) => {
@@ -943,30 +1000,50 @@ export default function ImportarPedido({
                           )}
 
                           {!ok && sugerencia && !f.manual && (
-                            <div className="rounded-lg bg-amber-50 px-2.5 py-1.5">
-                              <p className="text-[11.5px] text-amber-800">El codigo no existe. ¿Es este?</p>
-                              <p className="text-[12.5px] text-gray-900 truncate">
-                                <span className="font-mono text-[11px] text-gray-500 mr-1.5">{sugerencia.code}</span>
-                                {sugerencia.description}
+                            <div
+                              className={`rounded-lg px-2.5 py-2 ${
+                                todasLasPalabras ? "bg-amber-50" : "bg-gray-50 border border-dashed border-gray-200"
+                              }`}
+                            >
+                              <p className={`text-[11.5px] ${todasLasPalabras ? "text-amber-800" : "text-gray-600"}`}>
+                                {f.leidoCode ? "Ese codigo no existe. " : ""}
+                                {todasLasPalabras
+                                  ? sugeridas.length > 1
+                                    ? "Por la descripcion puede ser uno de estos. Elige el correcto:"
+                                    : "Por la descripcion puede ser este:"
+                                  : "No hay uno igual. Estos solo se parecen, revisa bien:"}
                               </p>
-                              <div className="flex gap-1.5 mt-1">
-                                <button
-                                  onClick={() => elegir(f.key, sugerencia)}
-                                  className="h-6 px-2 rounded-md text-[11.5px] font-medium bg-white border border-amber-200 text-amber-800 hover:bg-amber-100"
-                                >
-                                  Si, es este
-                                </button>
+                              <div className="mt-1 space-y-1">
+                                {sugeridas.map((o) => (
+                                  <div key={o.id} className="flex items-center gap-2 min-w-0">
+                                    <p className="flex-1 min-w-0 text-[12.5px] leading-snug text-gray-900 line-clamp-2" title={o.description}>
+                                      <span className="font-mono text-[11px] text-gray-500 mr-1.5">{o.code}</span>
+                                      {o.description}
+                                      {o.tipo === "parecido" && todasLasPalabras && (
+                                        <span className="ml-1.5 text-[10.5px] text-gray-400">(se parece)</span>
+                                      )}
+                                    </p>
+                                    <button
+                                      onClick={() => elegir(f.key, o)}
+                                      className="h-6 px-2 shrink-0 rounded-md text-[11.5px] font-medium bg-white border border-amber-200 text-amber-800 hover:bg-amber-100 whitespace-nowrap"
+                                    >
+                                      Es este
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="flex flex-wrap gap-1.5 mt-1.5">
                                 <button
                                   onClick={() => setBuscandoEn(f.key)}
-                                  className="h-6 px-2 rounded-md text-[11.5px] text-gray-600 hover:bg-white"
+                                  className="h-6 px-2 rounded-md text-[11.5px] text-gray-600 hover:bg-white inline-flex items-center gap-1 whitespace-nowrap"
                                 >
-                                  Buscar otro
+                                  <Search size={11} /> Buscar otro
                                 </button>
                                 <button
                                   onClick={() => cambiar(f.key, { manual: true, incluir: true })}
-                                  className="h-6 px-2 rounded-md text-[11.5px] text-gray-600 hover:bg-white"
+                                  className="h-6 px-2 rounded-md text-[11.5px] text-gray-600 hover:bg-white inline-flex items-center gap-1 whitespace-nowrap"
                                 >
-                                  Agregar como manual
+                                  <PenLine size={11} /> Agregar como manual
                                 </button>
                               </div>
                             </div>
@@ -1092,6 +1169,11 @@ export default function ImportarPedido({
                 {resumen.deLista > 0 && (
                   <span className="h-6 px-2 rounded-full bg-violet-50 text-violet-700 inline-flex items-center gap-1">
                     <Tag size={11} /> {resumen.deLista} con precio de la lista
+                  </span>
+                )}
+                {resumen.dosFormas > 0 && (
+                  <span className="h-6 px-2 rounded-full bg-amber-50 text-amber-800 inline-flex items-center gap-1">
+                    <AlertTriangle size={11} /> {resumen.dosFormas} se pueden leer de 2 formas · revisalas
                   </span>
                 )}
                 {resumen.dudosos > 0 && (
