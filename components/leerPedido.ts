@@ -261,7 +261,8 @@ export async function leerPdf(file: File): Promise<DocLeido> {
 
 export type Orden = "auto" | "codigo_cantidad" | "cantidad_codigo";
 
-export type Interpretacion = { codigos: string[]; qty: number };
+// qtys: cantidad propia de cada codigo posible (cuando viene pegado, "369-04")
+export type Interpretacion = { codigos: string[]; qty: number; qtys?: number[] };
 
 export type LineaPegada = {
   i: number;
@@ -288,19 +289,48 @@ function codigosDe(palabras: string[]): string[] {
   return Array.from(set).filter((c) => c.trim().length > 0);
 }
 
+// separadores sueltos entre codigo y cantidad: "369 - 04", "369 : 4", "369 = 4"
+const SEPARADOR = /^[-–—:=>]+$/;
+
+/** Las palabras utiles de una linea pegada (sin separadores ni "x"/"und"). */
+export function palabrasDe(linea: string): string[] {
+  return linea
+    .split(/[\t;|]+|\s+/)
+    .map((w) => w.trim().replace(/[:=]+$/, ""))
+    .filter((w) => w && !SEPARADOR.test(w) && !UNIDAD.test(w));
+}
+
+/** La linea sin la cantidad de adelante o de atras: para buscar por descripcion. */
+export function descripcionDe(linea: string): string {
+  const p = palabrasDe(linea);
+  if (p.length > 1 && cantidadDe(p[p.length - 1]) !== null) p.pop();
+  if (p.length > 1 && cantidadDe(p[0]) !== null) p.shift();
+  return p.join(" ");
+}
+
 export function interpretarPegado(texto: string): LineaPegada[] {
   const lineas = texto
     .split(/\r?\n/)
-    .map((l) => l.replace(/^[\s\-•*·>]+/, "").replace(/\s+$/, ""))
+    .map((l) => l.replace(/^[\s\-–•*·>]+/, "").replace(/\s+$/, ""))
     .filter((l) => l.trim().length > 0);
   return lineas.map((l, i) => {
-    const t = l.split(/[\t;|]+|\s+/).map((w) => w.trim()).filter(Boolean);
-    // palabras sueltas tipo "x" o "und" no cuentan
-    const tokens = t.filter((w) => !UNIDAD.test(w));
+    const tokens = palabrasDe(l);
     let A: Interpretacion | null = null;
     let B: Interpretacion | null = null;
     if (tokens.length === 1) {
-      A = { codigos: [tokens[0]], qty: 1 };
+      const w = tokens[0];
+      // todo pegado: "369-04", "88508A-05" o "5-369". Primero se prueba el codigo
+      // completo (hay codigos con guion, como GUN-93) y despues partido.
+      const fin = w.match(/^(.+?)[-–:=*](\d{1,4})$/);
+      const ini = w.match(/^(\d{1,4})[-–:=*](.+)$/);
+      const qFin = fin ? cantidadDe(fin[2]) : null;
+      const qIni = ini ? cantidadDe(ini[1]) : null;
+      A = { codigos: [w], qty: 1, qtys: [1] };
+      if (fin && qFin !== null) {
+        A.codigos.push(fin[1]);
+        A.qtys!.push(qFin);
+      }
+      if (ini && qIni !== null) B = { codigos: [ini[2]], qty: qIni };
     } else if (tokens.length > 1) {
       const qFin = cantidadDe(tokens[tokens.length - 1]);
       const qIni = cantidadDe(tokens[0]);
