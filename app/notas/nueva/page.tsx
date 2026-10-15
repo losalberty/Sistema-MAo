@@ -7,6 +7,8 @@ import {
   AlertTriangle,
   ArrowLeft,
   BookOpen,
+  ClipboardPaste,
+  FileUp,
   CalendarDays,
   Check,
   CircleDot,
@@ -27,6 +29,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import ProductPicker, { PickerProduct } from "@/components/ProductPicker";
+import ImportarPedido, { type ResultadoImportar } from "@/components/ImportarPedido";
 import { NumInput, notify } from "@/components/ui";
 import { tasaPara, useTasas } from "@/components/Tasas";
 import { Campo, Ventana, inputCls } from "@/components/Ventana";
@@ -139,6 +142,7 @@ function NuevaNotaInner() {
   const [results, setResults] = useState<Producto[]>([]);
   const [activo, setActivo] = useState(0);
   const [showPicker, setShowPicker] = useState(false);
+  const [importar, setImportar] = useState<"pdf" | "pegar" | null>(null);
   const [items, setItems] = useState<LineItem[]>([]);
 
   const [clientQuery, setClientQuery] = useState("");
@@ -397,6 +401,69 @@ function NuevaNotaInner() {
     searchSeq.current++;
     setQuery("");
     setResults([]);
+  }
+
+  // ---------- lo que viene de "Importar PDF" o "Pegar pedido" ----------
+  function agregarImportados(r: ResultadoImportar) {
+    let t = tier;
+    if (r.cliente) {
+      selectClient(r.cliente as ClientRow);
+      t = r.cliente.price_tier ?? 1;
+    } else if (r.clienteRapido && !selectedClient) {
+      setQuickClientName(r.clienteRapido);
+    }
+    setItems((prev) => {
+      const next = [...prev];
+      for (const l of r.lineas) {
+        const p = l.producto;
+        if (p) {
+          const idx = next.findIndex((it) => it.product_id === p.id);
+          if (idx >= 0) {
+            next[idx] = recalc({ ...next[idx], quantity: next[idx].quantity + l.qty });
+            continue;
+          }
+          next.push(
+            recalc({
+              product_id: p.id,
+              code_snapshot: p.code,
+              description_snapshot: p.description,
+              quantity: l.qty,
+              unit_price: l.precio ?? priceOf(p as PickerProduct, t),
+              line_discount: 0,
+              line_total: 0,
+              cost_snapshot: Number(p.cost ?? 0),
+              price_tier_used: l.precio !== null ? null : t,
+              prices: [p.price_1, p.price_2, p.price_3, p.price_4],
+              stock: p.stock_quantity != null ? Number(p.stock_quantity) : null,
+              supply: p.supply_type ?? "ALMACEN",
+            })
+          );
+        } else {
+          next.push(
+            recalc({
+              product_id: null,
+              code_snapshot: l.code,
+              description_snapshot: l.desc,
+              quantity: l.qty,
+              unit_price: l.precio ?? 0,
+              line_discount: 0,
+              line_total: 0,
+              cost_snapshot: 0,
+              price_tier_used: null,
+              stock: null,
+              supply: null,
+            })
+          );
+        }
+      }
+      return next;
+    });
+    setImportar(null);
+    const manuales = r.lineas.filter((l) => !l.producto).length;
+    notify.ok(
+      `${r.lineas.length} repuesto${r.lineas.length === 1 ? "" : "s"} agregado${r.lineas.length === 1 ? "" : "s"} a la nota`,
+      manuales ? `${manuales} entraron como productos manuales (fuera del catalogo).` : undefined
+    );
   }
 
   // ---------- cuadricula: navegacion y edicion ----------
@@ -836,6 +903,16 @@ function NuevaNotaInner() {
 
   return (
     <main className="p-6 max-w-[1240px] pb-16">
+      {importar && (
+        <ImportarPedido
+          modo={importar}
+          tier={tier}
+          hayCliente={!!selectedClient}
+          onClose={() => setImportar(null)}
+          onAgregar={agregarImportados}
+        />
+      )}
+
       {showPicker && (
         <ProductPicker
           tier={tier}
@@ -1044,7 +1121,7 @@ function NuevaNotaInner() {
 
           {/* ---------- productos ---------- */}
           <div className="bg-white border border-gray-200 rounded-xl shadow-card">
-            <div className="flex items-center gap-2 px-4 pt-4 pb-3">
+            <div className="flex items-center gap-2 flex-wrap px-4 pt-4 pb-3">
               <p className="text-[12px] font-medium text-gray-500">Productos</p>
               {items.length > 0 && (
                 <span className="text-[11.5px] text-gray-400">
@@ -1052,15 +1129,32 @@ function NuevaNotaInner() {
                 </span>
               )}
               <div className="flex-1" />
+              <div className="inline-flex rounded-lg border border-brand-200 bg-brand-50/60 p-0.5">
+                <button
+                  onClick={() => setImportar("pdf")}
+                  title="Leer un presupuesto o factura de FactuSOL en PDF"
+                  className="h-7 px-2.5 rounded-md inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-medium text-brand-800 hover:bg-white"
+                >
+                  <FileUp size={14} /> Importar PDF
+                </button>
+                <span className="w-px my-1 bg-brand-200" />
+                <button
+                  onClick={() => setImportar("pegar")}
+                  title="Pegar un pedido copiado de WhatsApp, Excel o un correo"
+                  className="h-7 px-2.5 rounded-md inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-medium text-brand-800 hover:bg-white"
+                >
+                  <ClipboardPaste size={14} /> Pegar pedido
+                </button>
+              </div>
               <button
                 onClick={() => setShowPicker(true)}
-                className="h-8 px-2.5 rounded-lg inline-flex items-center gap-1.5 text-[12.5px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                className="h-8 px-2.5 rounded-lg inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300"
               >
                 <BookOpen size={14} /> Catalogo
               </button>
               <button
                 onClick={addManualProduct}
-                className="h-8 px-2.5 rounded-lg inline-flex items-center gap-1.5 text-[12.5px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                className="h-8 px-2.5 rounded-lg inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300"
               >
                 <Plus size={14} /> Producto manual
               </button>
