@@ -311,3 +311,153 @@ export function interpretarPegado(texto: string): LineaPegada[] {
     return { i, texto: l.trim(), A, B };
   });
 }
+
+/* ============================================================
+   Lista de precios especial de un cliente (Excel o CSV)
+   Ej: "Lista VIP", "Lista Repuestos RM". Se busca sola la fila
+   de titulos (Codigo, Descripcion, Precio...) aunque arriba
+   tenga el nombre de la empresa, la fecha, etc.
+   ============================================================ */
+
+export type ItemLista = { code: string; desc: string; precio: number };
+
+export type ListaPrecios = {
+  colCodigo: number;
+  colDesc: number | null;
+  columnas: { idx: number; nombre: string }[]; // columnas que pueden ser el precio
+  sugerida: number; // la que se usa al abrirla
+  filas: string[][]; // datos, sin la fila de titulos
+};
+
+export const normCodigo = (s: string | null | undefined) => (s ?? "").toUpperCase().replace(/\s/g, "");
+// sin guiones, puntos ni barras: "GUN-93" = "GUN93"
+export const normCodigoSuelto = (s: string | null | undefined) => normCodigo(s).replace(/[-./_]/g, "");
+
+const RX_COD = /c[oó]d|^ref|referencia|n[°º.]?\s*(de\s*)?parte|part\s*n|sku/i;
+const RX_DESC = /desc|nombre|producto|art[ií]culo|detalle/i;
+const RX_PRECIO = /precio|p\.?\s*v\.?\s*p|pvp|usd|\$|valor|vip|mayor|lista|tarifa|neto|importe|especial|oferta/i;
+const RX_NO_PRECIO = /cant|exist|stock|unidades|empaque|bulto|m[ií]nimo|iva|%|costo|c[oó]d|ref|desc|marca|grupo|famil|ubic/i;
+const RX_FAVORITA = /vip|especial|oferta|cliente|neto|convenio/i;
+
+function numeroDeCelda(c: string): number | null {
+  const s = (c ?? "").replace(/US\$|USD|Bs\.?|\$|€/gi, "").trim();
+  if (!s) return null;
+  return aNumero(s);
+}
+
+function proporcionNumerica(filas: string[][], col: number) {
+  let llenas = 0;
+  let numeros = 0;
+  for (const r of filas.slice(0, 300)) {
+    const c = (r[col] ?? "").trim();
+    if (!c) continue;
+    llenas++;
+    if (numeroDeCelda(c) !== null) numeros++;
+  }
+  return llenas ? numeros / llenas : 0;
+}
+
+export function analizarLista(todas: string[][]): ListaPrecios | null {
+  const filas = todas.filter((r) => r.some((c) => (c ?? "").trim() !== ""));
+  if (filas.length === 0) return null;
+  const ancho = Math.max(...filas.map((r) => r.length));
+
+  // 1) buscar la fila de titulos en las primeras 25
+  let h = -1;
+  for (let i = 0; i < Math.min(25, filas.length); i++) {
+    const r = filas[i];
+    const ic = r.findIndex((c) => RX_COD.test(c) && c.length < 40);
+    if (ic < 0) continue;
+    const otra = r.some((c, j) => j !== ic && (RX_PRECIO.test(c) || RX_DESC.test(c)));
+    if (otra) {
+      h = i;
+      break;
+    }
+  }
+
+  let colCodigo = 0;
+  let colDesc: number | null = null;
+  let columnas: { idx: number; nombre: string }[] = [];
+  let datos: string[][];
+
+  if (h >= 0) {
+    const t = filas[h].map((c) => (c ?? "").trim());
+    datos = filas.slice(h + 1);
+    colCodigo = t.findIndex((c) => RX_COD.test(c) && c.length < 40);
+    const d = t.findIndex((c, j) => j !== colCodigo && RX_DESC.test(c));
+    colDesc = d >= 0 ? d : null;
+    for (let j = 0; j < ancho; j++) {
+      if (j === colCodigo || j === colDesc) continue;
+      const nombre = t[j] ?? "";
+      const pareceNombre = RX_PRECIO.test(nombre) && !RX_NO_PRECIO.test(nombre.replace(RX_PRECIO, ""));
+      const prop = proporcionNumerica(datos, j);
+      if ((pareceNombre && prop >= 0.5) || (!nombre && prop >= 0.8)) columnas.push({ idx: j, nombre: nombre || `Columna ${j + 1}` });
+    }
+    // si ningun titulo dice "precio", cualquier columna de numeros que no sea cantidad/stock
+    if (columnas.length === 0) {
+      for (let j = 0; j < ancho; j++) {
+        if (j === colCodigo || j === colDesc) continue;
+        const nombre = t[j] ?? "";
+        if (RX_NO_PRECIO.test(nombre)) continue;
+        if (proporcionNumerica(datos, j) >= 0.8) columnas.push({ idx: j, nombre: nombre || `Columna ${j + 1}` });
+      }
+    }
+  } else {
+    // sin titulos: 1a columna = codigo, la de texto mas largo = descripcion, las de numeros = precio
+    datos = filas;
+    colCodigo = 0;
+    let mejor = -1;
+    let largo = 0;
+    for (let j = 1; j < ancho; j++) {
+      if (proporcionNumerica(datos, j) >= 0.6) {
+        columnas.push({ idx: j, nombre: `Columna ${j + 1}` });
+        continue;
+      }
+      const prom = datos.reduce((s, r) => s + (r[j] ?? "").length, 0) / datos.length;
+      if (prom > largo) {
+        largo = prom;
+        mejor = j;
+      }
+    }
+    colDesc = mejor >= 0 ? mejor : null;
+  }
+
+  if (colCodigo < 0 || columnas.length === 0) return null;
+  const fav = columnas.find((c) => RX_FAVORITA.test(c.nombre));
+  const sugerida = (fav ?? columnas[columnas.length - 1]).idx;
+  return { colCodigo, colDesc, columnas, sugerida, filas: datos };
+}
+
+export function itemsDeLista(l: ListaPrecios, colPrecio: number): ItemLista[] {
+  const out: ItemLista[] = [];
+  for (const r of l.filas) {
+    const code = (r[l.colCodigo] ?? "").trim();
+    // se salta si es otra fila de titulos repetida
+    if (!code || /^(c[oó]d(igo)?|ref(erencia)?|sku)\.?$/i.test(code)) continue;
+    const precio = numeroDeCelda(r[colPrecio] ?? "");
+    if (precio === null || precio < 0) continue;
+    out.push({ code, desc: l.colDesc !== null ? (r[l.colDesc] ?? "").trim() : "", precio });
+  }
+  return out;
+}
+
+export type MapaLista = { exacto: Map<string, ItemLista>; suelto: Map<string, ItemLista>; total: number };
+
+export function mapaDeLista(items: ItemLista[]): MapaLista {
+  const exacto = new Map<string, ItemLista>();
+  const suelto = new Map<string, ItemLista>();
+  for (const it of items) {
+    const a = normCodigo(it.code);
+    const b = normCodigoSuelto(it.code);
+    if (a && !exacto.has(a)) exacto.set(a, it);
+    if (b && !suelto.has(b)) suelto.set(b, it);
+  }
+  return { exacto, suelto, total: items.length };
+}
+
+export function buscarEnLista(m: MapaLista | null, code: string | null | undefined): ItemLista | null {
+  if (!m || !code) return null;
+  const a = normCodigo(code);
+  if (!a) return null;
+  return m.exacto.get(a) ?? m.suelto.get(normCodigoSuelto(code)) ?? null;
+}
