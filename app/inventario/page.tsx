@@ -16,6 +16,8 @@ import {
   Printer,
   Search,
   ShoppingCart,
+  SlidersHorizontal,
+  Undo2,
   Upload,
   Warehouse,
 } from "lucide-react";
@@ -27,6 +29,7 @@ import {
   SkeletonRows,
   ToolbarButton,
   ToolbarSeparator,
+  confirmar,
   notify,
   type PillTone,
 } from "@/components/ui";
@@ -146,6 +149,7 @@ export default function InventarioPage() {
   const [kardexId, setKardexId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [showMinimos, setShowMinimos] = useState(false);
+  const [showAjuste, setShowAjuste] = useState(false);
   const [minimo, setMinimo] = useState<number>(0);
 
   const [grupos, setGrupos] = useState<{ category: string; total: number }[]>([]);
@@ -275,12 +279,35 @@ export default function InventarioPage() {
 
   return (
     <main className="p-6 max-w-[1180px]">
-      <Encabezado titulo="Inventario">{rows.length} productos en la vista</Encabezado>
+      <Encabezado titulo="Inventario">Cuánto tienes de cada repuesto y cuáles le pides al proveedor cuando los vendes.</Encabezado>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+        <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 flex gap-3">
+          <span className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+            <Warehouse size={17} />
+          </span>
+          <div className="text-[12.5px] text-gray-600 leading-relaxed">
+            <p className="text-[13.5px] font-medium text-gray-900">De almacén</p>
+            Lo tienes guardado en el estante. Al vender baja; al llegar compra sube. Te avisa cuando baja de su mínimo.
+          </div>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 flex gap-3">
+          <span className="w-9 h-9 rounded-xl bg-violet-50 text-violet-700 flex items-center justify-center shrink-0">
+            <ClipboardList size={17} />
+          </span>
+          <div className="text-[12.5px] text-gray-600 leading-relaxed">
+            <p className="text-[13.5px] font-medium text-gray-900">Bajo pedido</p>
+            No lo guardas: lo pides cuando lo vendes. Cada nota lo manda sola a <b className="font-medium">Pedidos → Por pedir</b>, con el nombre del cliente.
+          </div>
+        </div>
+      </div>
 
       <Barra>
-        <ToolbarButton icon={Upload} label="cargar cantidades" tone="brand" onClick={() => setShowImport(true)} />
+        <ToolbarButton icon={SlidersHorizontal} label="ajustar stock" tone="brand" onClick={() => setShowAjuste(true)} />
+        <ToolbarButton icon={Upload} label="cargar desde Excel" onClick={() => setShowImport(true)} />
         <ToolbarButton icon={History} label="ver historial" onClick={verHistorial} />
         <ToolbarSeparator />
+        <span className="text-[12px] text-gray-400 px-1 shrink-0">Marcar como:</span>
         <ToolbarButton icon={Warehouse} label="de almacen" onClick={() => cambiarTipo("ALMACEN")} />
         <ToolbarButton icon={ClipboardList} label="bajo pedido" onClick={() => cambiarTipo("PEDIDO")} />
         <ToolbarButton
@@ -290,7 +317,7 @@ export default function InventarioPage() {
           onClick={() => setShowMinimos((v) => !v)}
         />
         <ToolbarSeparator />
-        <ToolbarButton icon={ShoppingCart} label="hacer pedido" tone="success" onClick={() => router.push("/pedidos")} />
+        <ToolbarButton icon={ShoppingCart} label="pedidos" tone="success" onClick={() => router.push("/pedidos")} />
         <ToolbarButton icon={Package} label="productos" onClick={() => router.push("/productos")} />
         <ToolbarSeparator />
         <ToolbarButton icon={FileSpreadsheet} label="excel" onClick={exportar} />
@@ -426,8 +453,8 @@ export default function InventarioPage() {
           />
           <span className="w-[92px]">codigo</span>
           <span className="flex-1 min-w-0">descripcion</span>
-          <span className="w-14 text-right">stock</span>
-          <span className="w-12 text-right">min</span>
+          <span className="w-16 text-right">hay</span>
+          <span className="w-12 text-right">mínimo</span>
           <span className="w-[96px]">estado</span>
           <span className="w-16 text-right">costo</span>
           <span className="w-20 text-right">valor</span>
@@ -488,7 +515,12 @@ export default function InventarioPage() {
                 {r.supplier_name && <span className="ml-2 text-[10.5px] text-gray-400">{r.supplier_name}</span>}
               </span>
               <span
-                className={`w-14 text-right shrink-0 font-medium ${
+                title={
+                  r.supply_type === "PEDIDO" && r.stock < 0
+                    ? "Vendiste y todavía no ha llegado del proveedor"
+                    : undefined
+                }
+                className={`w-16 text-right shrink-0 font-medium ${
                   r.estado === "AGOTADO"
                     ? "text-red-600"
                     : r.estado === "REPONER"
@@ -498,7 +530,11 @@ export default function InventarioPage() {
                     : "text-gray-900"
                 }`}
               >
-                {num(r.stock)}
+                {r.supply_type === "PEDIDO" && r.stock < 0 ? (
+                  <span className="text-[11px] font-normal">debes {num(-r.stock)}</span>
+                ) : (
+                  num(r.stock)
+                )}
               </span>
               <span className="w-12 text-right text-gray-400 shrink-0">
                 {r.supply_type === "PEDIDO" ? "—" : num(r.min_stock)}
@@ -544,6 +580,21 @@ export default function InventarioPage() {
 
       {kardexId && (
         <KardexModal productId={kardexId} onClose={() => setKardexId(null)} onCambio={cargar} />
+      )}
+
+      {showAjuste && (
+        <AjustarStock
+          seleccion={Array.from(sel)}
+          vista={rows}
+          total={resumen?.total ?? rows.length}
+          grupos={grupos}
+          provs={provs}
+          onClose={() => setShowAjuste(false)}
+          onListo={() => {
+            setSel(new Set());
+            cargar();
+          }}
+        />
       )}
 
       {showImport && (
@@ -1014,6 +1065,273 @@ function ImportarModal({ onClose, onListo }: { onClose: () => void; onListo: () 
           </div>
         </>
       )}
+    </Ventana>
+  );
+}
+
+/* ============================================================
+   AJUSTAR STOCK DE MUCHOS A LA VEZ
+   1) a cuales  2) que hacer  3) vista previa  -> aplicar
+   Queda en el historial de cada repuesto y se puede deshacer.
+   ============================================================ */
+
+type Ajuste = { id: string; fecha: string; motivo: string; productos: number; deshecho: boolean };
+
+function AjustarStock({
+  seleccion,
+  vista,
+  total,
+  grupos,
+  provs,
+  onClose,
+  onListo,
+}: {
+  seleccion: string[];
+  vista: StockRow[];
+  total: number;
+  grupos: { category: string; total: number }[];
+  provs: { id: string; name: string; total: number }[];
+  onClose: () => void;
+  onListo: () => void;
+}) {
+  type Cuales = "marcados" | "vista" | "todos" | "grupo" | "proveedor" | "tipo";
+  const [cuales, setCuales] = useState<Cuales>(seleccion.length ? "marcados" : "vista");
+  const [valorFiltro, setValorFiltro] = useState("");
+  const [idsFiltro, setIdsFiltro] = useState<string[] | null>(null);
+  const [modo, setModo] = useState<"CERO" | "FIJAR" | "SUMAR">("CERO");
+  const [cant, setCant] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [ajustes, setAjustes] = useState<Ajuste[]>([]);
+
+  const cargarAjustes = useCallback(async () => {
+    const { data } = await supabase.rpc("ultimos_ajustes_lote");
+    setAjustes(((data ?? []) as Ajuste[]).slice(0, 4));
+  }, []);
+  useEffect(() => {
+    cargarAjustes();
+  }, [cargarAjustes]);
+
+  // ids de grupo / proveedor / tipo
+  useEffect(() => {
+    setIdsFiltro(null);
+    if (!["grupo", "proveedor", "tipo"].includes(cuales) || !valorFiltro) return;
+    supabase
+      .rpc("stock_ids_by", {
+        p_category: cuales === "grupo" ? valorFiltro : null,
+        p_supplier_id: cuales === "proveedor" ? valorFiltro : null,
+        p_supply_type: cuales === "tipo" ? valorFiltro : null,
+      })
+      .then(({ data }) => setIdsFiltro(((data ?? []) as { id: string }[]).map((x) => x.id)));
+  }, [cuales, valorFiltro]);
+
+  const ids: string[] | null =
+    cuales === "marcados"
+      ? seleccion
+      : cuales === "vista"
+      ? vista.map((r) => r.id)
+      : cuales === "todos"
+      ? null
+      : idsFiltro ?? [];
+  const cuantos = ids === null ? total : ids.length;
+
+  const nuevo = (r: StockRow) => (modo === "CERO" ? 0 : modo === "FIJAR" ? cant : r.stock + cant);
+  const muestra = useMemo(() => {
+    const set = ids ? new Set(ids) : null;
+    return vista.filter((r) => !set || set.has(r.id)).slice(0, 4);
+  }, [ids, vista]);
+
+  async function aplicar() {
+    if (cuantos === 0) return notify.aviso("No hay repuestos elegidos");
+    if (modo === "FIJAR" && cant < 0) return notify.aviso("La cantidad no puede ser negativa");
+    if (modo === "SUMAR" && cant === 0) return notify.aviso("Escribe cuánto sumar o restar");
+    const que =
+      modo === "CERO" ? "poner en 0" : modo === "FIJAR" ? `poner en ${num(cant)}` : `${cant > 0 ? "sumar" : "restar"} ${num(Math.abs(cant))}`;
+    const ok = await confirmar({
+      titulo: `¿${que.charAt(0).toUpperCase() + que.slice(1)} el stock de ${cuantos} repuestos?`,
+      mensaje: "Queda anotado en el historial de cada repuesto. Si te equivocas, lo deshaces desde aquí mismo.",
+      textoSi: "Sí, aplicar",
+      peligro: modo === "CERO",
+    });
+    if (!ok) return;
+    setBusy(true);
+    const { data, error } = await supabase.rpc("ajustar_stock_lote", {
+      p_ids: ids ?? [],
+      p_todos: ids === null,
+      p_modo: modo,
+      p_cantidad: modo === "CERO" ? 0 : cant,
+      p_motivo: null,
+    });
+    setBusy(false);
+    if (error) return notify.error("No se pudo ajustar", error.message);
+    const r = data as { productos: number };
+    notify.ok(r.productos ? `Stock ajustado en ${r.productos} repuestos` : "No había nada que cambiar");
+    cargarAjustes();
+    onListo();
+  }
+
+  async function deshacer(a: Ajuste) {
+    const ok = await confirmar({
+      titulo: "¿Deshacer este ajuste?",
+      mensaje: `${a.motivo} · ${a.productos} repuestos vuelven a como estaban.`,
+      textoSi: "Sí, deshacer",
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc("deshacer_ajuste_lote", { p_lote: a.id });
+    if (error) return notify.error("No se pudo deshacer", error.message);
+    notify.ok("Ajuste deshecho");
+    cargarAjustes();
+    onListo();
+  }
+
+  const opcion = (k: Cuales, t: string, n?: number) => (
+    <button
+      key={k}
+      onClick={() => {
+        setCuales(k);
+        setValorFiltro("");
+      }}
+      className={`h-8 px-3 rounded-lg text-[12.5px] border whitespace-nowrap ${
+        cuales === k ? "border-brand-300 bg-brand-50 text-brand-800 font-medium" : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+      }`}
+    >
+      {t}
+      {n !== undefined && <span className="text-gray-400"> ({n})</span>}
+    </button>
+  );
+
+  return (
+    <Ventana
+      titulo="Ajustar stock"
+      subtitulo="Cambia la cantidad de muchos repuestos a la vez"
+      icono={SlidersHorizontal}
+      ancho="max-w-xl"
+      onClose={onClose}
+      pie={
+        <>
+          <span className="mr-auto text-[12.5px] text-gray-500">
+            Cambia <b className="font-medium text-gray-900">{cuantos}</b> repuestos
+          </span>
+          <button onClick={onClose} className="h-9 px-3 text-[13px] text-gray-600 rounded-lg hover:bg-gray-100">
+            Cerrar
+          </button>
+          <button
+            onClick={aplicar}
+            disabled={busy || cuantos === 0}
+            className="h-9 px-4 rounded-lg bg-brand-700 text-white text-[13px] font-medium hover:bg-brand-800 disabled:opacity-50"
+          >
+            Aplicar
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <section>
+          <p className="text-[13px] font-medium text-gray-900 mb-2">1. ¿A cuáles repuestos?</p>
+          <div className="flex flex-wrap gap-1.5">
+            {seleccion.length > 0 && opcion("marcados", "Los que marqué", seleccion.length)}
+            {opcion("vista", "Los de la lista", vista.length)}
+            {opcion("todos", "Todos", total)}
+            {opcion("grupo", "Un grupo")}
+            {opcion("proveedor", "Un proveedor")}
+            {opcion("tipo", "Por tipo")}
+          </div>
+          {cuales === "grupo" && (
+            <select value={valorFiltro} onChange={(e) => setValorFiltro(e.target.value)} className={`${inputCls} mt-2`}>
+              <option value="">Elige el grupo…</option>
+              {grupos.map((g) => (
+                <option key={g.category} value={g.category}>
+                  {g.category} ({g.total})
+                </option>
+              ))}
+            </select>
+          )}
+          {cuales === "proveedor" && (
+            <select value={valorFiltro} onChange={(e) => setValorFiltro(e.target.value)} className={`${inputCls} mt-2`}>
+              <option value="">Elige el proveedor…</option>
+              {provs.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.total})
+                </option>
+              ))}
+            </select>
+          )}
+          {cuales === "tipo" && (
+            <select value={valorFiltro} onChange={(e) => setValorFiltro(e.target.value)} className={`${inputCls} mt-2`}>
+              <option value="">Elige el tipo…</option>
+              <option value="ALMACEN">De almacén</option>
+              <option value="PEDIDO">Bajo pedido</option>
+            </select>
+          )}
+        </section>
+
+        <section>
+          <p className="text-[13px] font-medium text-gray-900 mb-2">2. ¿Qué hacer?</p>
+          <Segmento
+            opciones={[
+              { k: "CERO", l: "Poner en 0" },
+              { k: "FIJAR", l: "Poner una cantidad" },
+              { k: "SUMAR", l: "Sumar o restar" },
+            ]}
+            valor={modo}
+            onChange={setModo}
+          />
+          {modo !== "CERO" && (
+            <div className="mt-2 flex items-center gap-2">
+              <NumInput
+                value={cant}
+                onChange={setCant}
+                className="w-28 h-9 px-2 border border-gray-200 rounded-lg text-[14px] text-right"
+                ariaLabel="Cantidad"
+              />
+              <span className="text-[12px] text-gray-500">
+                {modo === "FIJAR" ? "cada repuesto queda con esta cantidad" : "usa un número negativo para restar"}
+              </span>
+            </div>
+          )}
+        </section>
+
+        <section>
+          <p className="text-[13px] font-medium text-gray-900 mb-2">3. Así quedaría</p>
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            {muestra.map((r) => (
+              <div key={r.id} className="flex items-center gap-3 px-3 py-2 border-t border-gray-100 first:border-t-0 text-[12.5px]">
+                <span className="font-mono text-[11px] text-gray-500 w-24 truncate">{r.code}</span>
+                <span className="flex-1 min-w-0 truncate">{r.description}</span>
+                <span className="text-gray-500">{num(r.stock)}</span>
+                <span className="text-gray-300">→</span>
+                <span className="font-medium text-gray-900 w-12 text-right">{num(nuevo(r))}</span>
+              </div>
+            ))}
+            {cuantos > muestra.length && (
+              <p className="px-3 py-2 border-t border-gray-100 text-[12px] text-gray-500">
+                y {cuantos - muestra.length} repuestos más…
+              </p>
+            )}
+            {cuantos === 0 && <p className="px-3 py-3 text-[12px] text-gray-500">Todavía no hay repuestos elegidos.</p>}
+          </div>
+        </section>
+
+        {ajustes.length > 0 && (
+          <section>
+            <p className="text-[12px] text-gray-500 mb-1.5">Últimos ajustes</p>
+            {ajustes.map((a) => (
+              <div key={a.id} className="flex items-center gap-2 py-1 text-[12px]">
+                <span className="text-gray-400 w-24">{new Date(a.fecha).toLocaleDateString("es-VE")}</span>
+                <span className="flex-1 min-w-0 truncate text-gray-700">
+                  {a.motivo} · {a.productos} repuestos
+                </span>
+                {a.deshecho ? (
+                  <span className="text-gray-400">deshecho</span>
+                ) : (
+                  <button onClick={() => deshacer(a)} className="text-brand-700 hover:underline inline-flex items-center gap-1">
+                    <Undo2 size={12} /> Deshacer
+                  </button>
+                )}
+              </div>
+            ))}
+          </section>
+        )}
+      </div>
     </Ventana>
   );
 }
