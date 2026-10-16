@@ -105,6 +105,7 @@
 
 
 
+
 /* ============================================================
    Modo oscuro (se activa con el boton de la luna, arriba)
    Las reglas de abajo se generan solas a partir de los colores
@@ -263,6 +264,7 @@ html.dark{color-scheme:dark}
 .dark .text-red-800{color:#fca5a5}
 .dark .text-sky-700{color:#7dd3fc}
 .dark .text-sky-800{color:#7dd3fc}
+.dark .text-violet-600{color:#c4b5fd}
 .dark .text-violet-700{color:#c4b5fd}
 .dark .text-violet-800{color:#c4b5fd}
 .dark .text-violet-900{color:#c4b5fd}
