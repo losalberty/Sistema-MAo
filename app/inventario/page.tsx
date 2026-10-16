@@ -44,6 +44,8 @@ type StockRow = {
   category: string | null;
   supply_type: string;
   stock: number;
+  apartado: number;
+  en_camino: number;
   min_stock: number;
   cost: number;
   valor: number;
@@ -58,6 +60,9 @@ type Resumen = {
   pedido: number;
   reponer: number;
   agotados: number;
+  sin_stock?: number;
+  esperando?: number;
+  apartado_unidades?: number;
   valor: number;
 };
 
@@ -76,6 +81,8 @@ type Movimiento = {
 
 type Kardex = {
   stock: number;
+  apartado?: number;
+  en_camino?: number;
   min_stock: number;
   supply_type: string;
   description: string;
@@ -108,6 +115,7 @@ const ESTADOS: Record<string, { label: string; tone: PillTone }> = {
   OK: { label: "suficiente", tone: "success" },
   REPONER: { label: "reponer", tone: "warning" },
   AGOTADO: { label: "agotado", tone: "danger" },
+  SIN_STOCK: { label: "sin stock", tone: "neutral" },
   PEDIDO: { label: "bajo pedido", tone: "violet" },
 };
 
@@ -227,19 +235,34 @@ export default function InventarioPage() {
       p_type: tipo,
     });
     if (error) return notify.error("No se pudo cambiar", error.message);
-    notify.ok(`${sel.size} productos marcados ${tipo === "PEDIDO" ? "bajo pedido" : "de almacen"}`);
+    notify.ok(
+      `${sel.size} productos ahora son ${tipo === "PEDIDO" ? "bajo pedido" : "de almacén"}`,
+      tipo === "PEDIDO"
+        ? "Lo que vendas y no haya en el estante va solo a Pedidos → Por pedir. No avisan agotado."
+        : "Se guardan en el estante y avisan cuando bajan de su mínimo."
+    );
     setSel(new Set());
     cargar();
   }
 
   async function aplicarMinimo() {
-    if (!necesitaSeleccion("ponerles un minimo")) return;
+    // con marcados: a esos; sin marcados: a todos los de la lista (el filtro que ves)
+    const ids = sel.size > 0 ? Array.from(sel) : rows.map((r) => r.id);
+    if (ids.length === 0) return notify.info("No hay productos en la lista");
+    if (sel.size === 0) {
+      const ok = await confirmar({
+        titulo: `¿Poner mínimo ${num(minimo)} a los ${ids.length} de la lista?`,
+        mensaje: "Se aplica a todos los repuestos que estás viendo con este filtro y esta búsqueda.",
+        textoSi: "Sí, aplicar",
+      });
+      if (!ok) return;
+    }
     const { error } = await supabase.rpc("set_min_stock", {
-      p_ids: Array.from(sel),
+      p_ids: ids,
       p_min: minimo,
     });
     if (error) return notify.error("No se pudo aplicar", error.message);
-    notify.ok(`Minimo de ${num(minimo)} puesto en ${sel.size} productos`);
+    notify.ok(`Mínimo de ${num(minimo)} puesto en ${ids.length} productos`);
     setMinimo(0);
     setSel(new Set());
     cargar();
@@ -302,14 +325,10 @@ export default function InventarioPage() {
         </div>
       </div>
 
+      <div className="sticky top-[52px] z-20 -mx-6 px-6 pt-2 bg-[#f5f6f8]/85 backdrop-blur-md print:static">
       <Barra>
         <ToolbarButton icon={SlidersHorizontal} label="ajustar stock" tone="brand" onClick={() => setShowAjuste(true)} />
         <ToolbarButton icon={Upload} label="cargar desde Excel" onClick={() => setShowImport(true)} />
-        <ToolbarButton icon={History} label="ver historial" onClick={verHistorial} />
-        <ToolbarSeparator />
-        <span className="text-[12px] text-gray-400 px-1 shrink-0">Marcar como:</span>
-        <ToolbarButton icon={Warehouse} label="de almacen" onClick={() => cambiarTipo("ALMACEN")} />
-        <ToolbarButton icon={ClipboardList} label="bajo pedido" onClick={() => cambiarTipo("PEDIDO")} />
         <ToolbarButton
           icon={Calculator}
           label="minimos"
@@ -323,6 +342,7 @@ export default function InventarioPage() {
         <ToolbarButton icon={FileSpreadsheet} label="excel" onClick={exportar} />
         <ToolbarButton icon={Printer} label="imprimir" onClick={() => window.print()} />
       </Barra>
+      </div>
 
       {error && (
         <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
@@ -331,36 +351,41 @@ export default function InventarioPage() {
       {resumen && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
           <Tarjeta
-            label="Valor del inventario"
+            label="Valor en el estante"
             valor={`$${money(resumen.valor)}`}
-            sub={`${resumen.almacen} de almacen`}
+            sub="lo que tienes en físico, a costo"
             icono={DollarSign}
             acento="bg-brand-50 text-brand-700"
           />
-          <Tarjeta
-            label="Por reponer"
-            valor={String(resumen.reponer)}
-            tono="text-amber-700"
-            sub="bajo el minimo"
-            icono={ArrowDownToLine}
-            acento="bg-amber-50 text-amber-700"
-          />
-          <Tarjeta
-            label="Agotados"
-            valor={String(resumen.agotados)}
-            tono="text-red-600"
-            sub="de almacen, en cero"
-            icono={AlertOctagon}
-            acento="bg-red-50 text-red-600"
-          />
-          <Tarjeta
-            label="Bajo pedido"
-            valor={String(resumen.pedido)}
-            tono="text-violet-700"
-            sub="no alertan"
-            icono={ClipboardList}
-            acento="bg-violet-50 text-violet-700"
-          />
+          <button onClick={() => setFiltro("ESPERANDO")} className="text-left">
+            <Tarjeta
+              label="Clientes esperando"
+              valor={String(resumen.esperando ?? 0)}
+              tono="text-violet-700"
+              sub={`${num(resumen.apartado_unidades ?? 0)} unidades apartadas`}
+              icono={ClipboardList}
+              acento="bg-violet-50 text-violet-700"
+            />
+          </button>
+          <button onClick={() => setFiltro("REPONER")} className="text-left">
+            <Tarjeta
+              label="Por reponer"
+              valor={String(resumen.reponer)}
+              tono="text-amber-700"
+              sub={resumen.agotados ? `${resumen.agotados} de ellos en 0` : "bajo su mínimo"}
+              icono={ArrowDownToLine}
+              acento="bg-amber-50 text-amber-700"
+            />
+          </button>
+          <button onClick={() => setFiltro("PEDIDO")} className="text-left">
+            <Tarjeta
+              label="Bajo pedido"
+              valor={String(resumen.pedido)}
+              sub={`${resumen.almacen} son de almacén`}
+              icono={Warehouse}
+              acento="bg-gray-100 text-gray-600"
+            />
+          </button>
         </div>
       )}
 
@@ -370,6 +395,7 @@ export default function InventarioPage() {
           minimo={minimo}
           setMinimo={setMinimo}
           onAplicar={aplicarMinimo}
+          enLista={rows.length}
           onSugerido={(r) => {
             notify.ok(`Minimos puestos en ${r.actualizados} productos`, `Para aguantar ${r.dias} dias de venta.`);
             cargar();
@@ -393,10 +419,11 @@ export default function InventarioPage() {
             valor={filtro}
             onChange={setFiltro}
             opciones={[
-              { k: "TODOS", l: "todos", title: "toda tu lista" },
-              { k: "REPONER", l: "por reponer", title: "bajaron de su minimo — hay que comprar" },
-              { k: "AGOTADO", l: "agotados", title: "de almacen y en cero" },
-              { k: "PEDIDO", l: "bajo pedido", title: "los que le pides al proveedor" },
+              { k: "TODOS", l: "Todos", title: "toda tu lista" },
+              { k: "ESPERANDO", l: "Clientes esperando", title: "vendidos y todavía sin entregar" },
+              { k: "REPONER", l: "Por reponer", title: "de almacén, por debajo de su mínimo (incluye los que están en 0)" },
+              { k: "SIN_STOCK", l: "Sin stock", title: "de almacén, en 0 y sin mínimo puesto" },
+              { k: "PEDIDO", l: "Bajo pedido", title: "los que pides cuando los vendes" },
             ]}
           />
         </div>
@@ -449,11 +476,14 @@ export default function InventarioPage() {
             checked={todoMarcado}
             onChange={() => setSel(todoMarcado ? new Set() : new Set(rows.map((r) => r.id)))}
             className="w-3 h-3 shrink-0 accent-brand-700"
-            aria-label="Seleccionar todo lo que veo"
+            aria-label="Seleccionar todos los de la lista"
+            title={`Marcar los ${rows.length} de la lista`}
           />
           <span className="w-[92px]">codigo</span>
           <span className="flex-1 min-w-0">descripcion</span>
-          <span className="w-16 text-right">hay</span>
+          <span className="w-14 text-right" title="lo que tienes en físico">hay</span>
+          <span className="w-16 text-right" title="vendido y sin entregar">apartado</span>
+          <span className="w-16 text-right" title="en hojas de pedido abiertas">en camino</span>
           <span className="w-12 text-right">mínimo</span>
           <span className="w-[96px]">estado</span>
           <span className="w-16 text-right">costo</span>
@@ -465,29 +495,33 @@ export default function InventarioPage() {
 
         {!cargando && rows.length === 0 && (
           <EmptyState
-            icon={filtro === "AGOTADO" ? Boxes : PackageSearch}
+            icon={filtro === "SIN_STOCK" ? Boxes : PackageSearch}
             title={
               filtro === "REPONER"
-                ? "Ningun producto esta por debajo de su minimo"
-                : filtro === "AGOTADO"
-                ? "No tienes productos de almacen en cero"
+                ? "Ningún repuesto está por debajo de su mínimo"
+                : filtro === "SIN_STOCK"
+                ? "No hay repuestos de almacén en 0 sin mínimo"
+                : filtro === "ESPERANDO"
+                ? "Ningún cliente está esperando"
                 : filtro === "PEDIDO"
-                ? "Todavia no hay productos bajo pedido"
-                : "No hay productos que coincidan"
+                ? "Todavía no hay repuestos bajo pedido"
+                : "No hay repuestos que coincidan"
             }
           >
             {filtro === "REPONER"
-              ? 'Si todos tus minimos estan en cero, este filtro nunca muestra nada. Usa el boton "minimos" y el sistema los calcula segun lo que vendes.'
+              ? "Aquí salen los repuestos de almacén que tienen un mínimo puesto y están por debajo (también los que están en 0)."
+              : filtro === "ESPERANDO"
+              ? "Cuando una nota pide más de lo que hay en el estante, lo que falta aparece aquí y en Pedidos → Por pedir."
               : filtro === "PEDIDO"
-              ? 'Marca los que no tienes en fisico y le pides al proveedor, y dale a "bajo pedido". Esos dejan de alertarte por estar en cero.'
-              : filtro === "AGOTADO"
-              ? "Bien ahi."
-              : 'Si aun no has cargado cantidades, usa el boton "cargar cantidades".'}
+              ? "Marca los repuestos que no guardas y le pides al proveedor cuando los vendes, y pulsa «Bajo pedido» abajo."
+              : filtro === "SIN_STOCK"
+              ? "Bien: todo lo de almacén tiene existencia o un mínimo."
+              : "Revisa la búsqueda o cambia el filtro."}
           </EmptyState>
         )}
 
         {rows.slice(0, visibles).map((r, idx) => {
-          const e = ESTADOS[r.estado] ?? ESTADOS.OK;
+          const e = r.estado === "REPONER" && r.stock <= 0 ? ESTADOS.AGOTADO : ESTADOS[r.estado] ?? ESTADOS.OK;
           const on = sel.has(r.id);
           return (
             <div
@@ -515,26 +549,23 @@ export default function InventarioPage() {
                 {r.supplier_name && <span className="ml-2 text-[10.5px] text-gray-400">{r.supplier_name}</span>}
               </span>
               <span
-                title={
-                  r.supply_type === "PEDIDO" && r.stock < 0
-                    ? "Vendiste y todavía no ha llegado del proveedor"
-                    : undefined
-                }
-                className={`w-16 text-right shrink-0 font-medium ${
-                  r.estado === "AGOTADO"
+                className={`w-14 text-right shrink-0 font-medium ${
+                  r.estado === "REPONER" && r.stock <= 0
                     ? "text-red-600"
                     : r.estado === "REPONER"
                     ? "text-amber-700"
-                    : r.stock < 0
-                    ? "text-violet-700"
-                    : "text-gray-900"
+                    : r.stock > 0
+                    ? "text-gray-900"
+                    : "text-gray-400"
                 }`}
               >
-                {r.supply_type === "PEDIDO" && r.stock < 0 ? (
-                  <span className="text-[11px] font-normal">debes {num(-r.stock)}</span>
-                ) : (
-                  num(r.stock)
-                )}
+                {num(r.stock)}
+              </span>
+              <span className={`w-16 text-right shrink-0 ${r.apartado > 0 ? "text-violet-700 font-medium" : "text-gray-300"}`}>
+                {r.apartado > 0 ? num(r.apartado) : "—"}
+              </span>
+              <span className={`w-16 text-right shrink-0 ${r.en_camino > 0 ? "text-sky-700" : "text-gray-300"}`}>
+                {r.en_camino > 0 ? num(r.en_camino) : "—"}
               </span>
               <span className="w-12 text-right text-gray-400 shrink-0">
                 {r.supply_type === "PEDIDO" ? "—" : num(r.min_stock)}
@@ -578,6 +609,48 @@ export default function InventarioPage() {
         </div>
       </div>
 
+      {sel.size > 0 && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 pl-4 pr-1.5 py-1.5 rounded-2xl bg-gray-900 text-white shadow-pop print:hidden max-w-[calc(100vw-24px)] overflow-x-auto">
+          <span className="text-[13px] whitespace-nowrap mr-2">
+            <b className="font-semibold">{sel.size}</b> {sel.size === 1 ? "marcado" : "marcados"}
+          </span>
+          {sel.size === 1 && (
+            <button onClick={verHistorial} className="h-8 px-2.5 rounded-lg text-[12.5px] hover:bg-white/10 inline-flex items-center gap-1.5 whitespace-nowrap">
+              <History size={14} /> Historial
+            </button>
+          )}
+          <button
+            onClick={() => cambiarTipo("ALMACEN")}
+            title="Lo guardas en el estante: avisa cuando baja de su mínimo"
+            className="h-8 px-2.5 rounded-lg text-[12.5px] hover:bg-white/10 inline-flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <Warehouse size={14} /> De almacén
+          </button>
+          <button
+            onClick={() => cambiarTipo("PEDIDO")}
+            title="Lo pides cuando lo vendes: no avisa agotado"
+            className="h-8 px-2.5 rounded-lg text-[12.5px] hover:bg-white/10 inline-flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <ClipboardList size={14} /> Bajo pedido
+          </button>
+          <button
+            onClick={() => setShowMinimos(true)}
+            className="h-8 px-2.5 rounded-lg text-[12.5px] hover:bg-white/10 inline-flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <Calculator size={14} /> Mínimo
+          </button>
+          <button
+            onClick={() => setShowAjuste(true)}
+            className="h-8 px-2.5 rounded-lg text-[12.5px] hover:bg-white/10 inline-flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <SlidersHorizontal size={14} /> Ajustar stock
+          </button>
+          <button onClick={() => setSel(new Set())} className="h-8 px-3 rounded-lg text-[12.5px] text-gray-300 hover:text-white hover:bg-white/10 whitespace-nowrap">
+            Quitar
+          </button>
+        </div>
+      )}
+
       {kardexId && (
         <KardexModal productId={kardexId} onClose={() => setKardexId(null)} onCambio={cargar} />
       )}
@@ -619,6 +692,7 @@ function MinimosPanel({
   onAplicar,
   onSugerido,
   ids,
+  enLista,
 }: {
   seleccionados: number;
   minimo: number;
@@ -626,6 +700,7 @@ function MinimosPanel({
   onAplicar: () => void;
   onSugerido: (r: { actualizados: number; dias: number }) => void;
   ids: string[] | null;
+  enLista: number;
 }) {
   const [dias, setDias] = useState(15);
   const [busy, setBusy] = useState(false);
@@ -666,7 +741,7 @@ function MinimosPanel({
       <div className="bg-white border border-gray-200 rounded-xl shadow-card p-4">
         <p className="text-[13px] font-medium text-gray-900 mb-0.5">Ponerlo a mano</p>
         <p className="text-[11.5px] text-gray-500 mb-3">
-          Marca los productos en la lista y escribe el minimo que quieres para todos ellos.
+          Se aplica a los que marques. Si no marcas ninguno, a todos los que estás viendo en la lista.
         </p>
         <div className="flex items-end gap-2">
           <Campo label="Minimo">
@@ -674,10 +749,10 @@ function MinimosPanel({
           </Campo>
           <button
             onClick={onAplicar}
-            disabled={seleccionados === 0}
+            disabled={seleccionados === 0 && enLista === 0}
             className="h-9 px-4 rounded-lg border border-gray-300 bg-white text-sm text-gray-800 hover:bg-gray-50 disabled:opacity-40"
           >
-            Aplicar a {seleccionados} marcados
+            {seleccionados > 0 ? `Aplicar a ${seleccionados} marcados` : `Aplicar a los ${enLista} de la lista`}
           </button>
         </div>
       </div>
@@ -766,9 +841,10 @@ function KardexModal({
       onClose={onClose}
     >
       {k && (
-        <div className="grid grid-cols-4 gap-2 mb-4">
-          <Mini label="Existencia" valor={num(k.stock)} />
-          <Mini label="Minimo" valor={k.supply_type === "PEDIDO" ? "—" : num(k.min_stock)} />
+        <div className="grid grid-cols-5 gap-2 mb-4">
+          <Mini label="En el estante" valor={num(k.stock)} />
+          <Mini label="Apartado / en camino" valor={`${num(k.apartado ?? 0)} / ${num(k.en_camino ?? 0)}`} />
+          <Mini label="Mínimo" valor={k.supply_type === "PEDIDO" ? "—" : num(k.min_stock)} />
           <Mini label="Vendido 90 dias" valor={num(k.vendido_90d)} />
           <Mini
             label="Te alcanza para"
@@ -840,7 +916,7 @@ function KardexModal({
         <span className="flex-1 min-w-0">documento</span>
         <span className="w-10 text-right">entra</span>
         <span className="w-10 text-right">sale</span>
-        <span className="w-12 text-right">saldo</span>
+        <span className="w-12 text-right" title="estante menos apartado, después de cada movimiento">neto</span>
       </div>
 
       {!k && !err && <SkeletonRows rows={4} />}
