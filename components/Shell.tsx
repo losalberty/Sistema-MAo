@@ -21,6 +21,7 @@ import {
   Plus,
   Receipt,
   Search,
+  Settings,
   Sun,
   Undo2,
   Users,
@@ -63,6 +64,7 @@ const GRUPOS: Grupo[] = [
     ],
   },
   { titulo: "Analisis", items: [{ label: "Informes", icon: ChartColumn, href: "/informes" }] },
+  { titulo: "Sistema", items: [{ label: "Ajustes", icon: Settings, href: "/ajustes" }] },
 ];
 
 type Avisos = {
