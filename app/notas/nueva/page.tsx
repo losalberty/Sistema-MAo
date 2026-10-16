@@ -117,7 +117,11 @@ function fechaBonita(iso: string) {
 // pastilla de existencia de un repuesto
 function Existencia({ stock, supply, pide }: { stock?: number | null; supply?: string | null; pide?: number }) {
   if (supply === "PEDIDO")
-    return <span className="text-[11px] px-1.5 py-px rounded-md bg-violet-50 text-violet-700 whitespace-nowrap">bajo pedido</span>;
+    return (
+      <span className="text-[11px] px-1.5 py-px rounded-md bg-violet-50 text-violet-700 whitespace-nowrap">
+        bajo pedido{stock && Number(stock) > 0 ? ` · hay ${Number(stock)}` : ""}
+      </span>
+    );
   if (stock === undefined || stock === null) return null;
   const s = Number(stock);
   const falta = pide !== undefined && pide > s;
@@ -362,8 +366,10 @@ function NuevaNotaInner() {
   function avisarExistencia(p: Producto, cantidad: number) {
     if ((p.supply_type ?? "ALMACEN") === "PEDIDO") return;
     const s = Number(p.stock_quantity ?? 0);
-    if (s <= 0) notify.aviso(`${p.code} esta agotado`, "Se agrega igual; queda esperando en Pedidos hasta que llegue.");
-    else if (cantidad > s) notify.aviso(`Solo hay ${s} de ${p.code}`, "Lo que falte queda esperando en Pedidos.");
+    if (s <= 0)
+      notify.aviso(`${p.code} no hay en el estante`, "Se agrega igual: queda apartado para este cliente y aparece en Pedidos → Por pedir.");
+    else if (cantidad > s)
+      notify.aviso(`Solo hay ${s} de ${p.code}`, `Se entregan ${s} del estante y lo demás queda en Pedidos → Por pedir.`);
   }
 
   function addProduct(p: Producto, tierUsed: number) {
