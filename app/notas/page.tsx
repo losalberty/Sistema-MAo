@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -1162,6 +1163,7 @@ function PanelNota({
   const [abonando, setAbonando] = useState(abonarAlAbrir);
   const [verRentab, setVerRentab] = useState(false);
   const [verMas, setVerMas] = useState(false);
+  const [posMas, setPosMas] = useState<{ top: number; right: number } | null>(null);
   const raizPanel = useRef<HTMLDivElement>(null);
   const cajaMas = useRef<HTMLDivElement>(null);
   const cerrarMas = useCallback(() => setVerMas(false), []);
@@ -1492,15 +1494,26 @@ function PanelNota({
                 <BotonSec icon={Pencil} label="Editar" onClick={() => onEditar(p.id)} />
                 <div className="relative" ref={cajaMas}>
                   <button
-                    onClick={() => setVerMas((v) => !v)}
-                    title="Mas acciones"
+                    onClick={(e) => {
+                      const r = e.currentTarget.getBoundingClientRect();
+                      const alto = 150;
+                      const top = r.bottom + 6 + alto > window.innerHeight ? r.top - alto - 6 : r.bottom + 6;
+                      setPosMas({ top, right: Math.max(8, window.innerWidth - r.right) });
+                      setVerMas((v) => !v);
+                    }}
+                    title="Más acciones"
+                    aria-label="Más acciones"
                     className="h-[34px] w-[34px] rounded-[9px] inline-flex items-center justify-center border border-gray-200 bg-white text-gray-600 hover:border-gray-300"
                   >
                     <Ellipsis size={16} />
                   </button>
-                  {verMas && (
-                    <>
-                      <div className="absolute right-0 top-10 z-20 w-52 rounded-xl bg-white border border-gray-200 shadow-pop p-1.5">
+                  {verMas && posMas && typeof document !== "undefined" &&
+                    createPortal(
+                      <div
+                        data-menu-flotante
+                        style={{ position: "fixed", top: posMas.top, right: posMas.right }}
+                        className="z-[80] w-56 rounded-xl bg-white border border-gray-200 shadow-pop p-1.5"
+                      >
                         {!anulada && (
                           <button
                             onClick={() => {
@@ -1531,9 +1544,9 @@ function PanelNota({
                         >
                           <Trash2 size={15} /> Eliminar nota
                         </button>
-                      </div>
-                    </>
-                  )}
+                      </div>,
+                      document.body
+                    )}
                 </div>
               </div>
 
