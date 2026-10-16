@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Archive,
   ArchiveRestore,
@@ -216,8 +217,19 @@ function estadoFactura(r: LedgerRow): { texto: string; tone: PillTone } {
   return { texto: "Pendiente", tone: "warning" };
 }
 
+type HojaProv = {
+  id: string;
+  numero: number;
+  fecha: string;
+  status: string;
+  items: { product_id: string; code: string; description: string; cantidad: number; llegaron: number }[];
+};
+
 export default function ComprasPage() {
+  const router = useRouter();
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
+  const [hojaId, setHojaId] = useState("");
+  const [hojasProv, setHojasProv] = useState<HojaProv[]>([]);
   const [current, setCurrent] = useState<string>("");
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -276,6 +288,31 @@ export default function ComprasPage() {
   useEffect(() => {
     loadSuppliers();
   }, [loadSuppliers]);
+
+  // hojas de pedido de ese proveedor (para decir de cual viene la factura)
+  useEffect(() => {
+    setHojaId("");
+    setHojasProv([]);
+    if (!showForm || !supplierId) return;
+    supabase.rpc("hojas_de_proveedor", { p_supplier_id: supplierId }).then(({ data }) => {
+      setHojasProv((data ?? []) as HojaProv[]);
+    });
+  }, [supplierId, showForm]);
+
+  function copiarDeHoja() {
+    const h = hojasProv.find((x) => x.id === hojaId);
+    if (!h) return;
+    setLines(
+      h.items.map((it) => ({
+        ...emptyLine,
+        code: it.code,
+        description: it.description,
+        quantity: String(Math.max(it.cantidad - it.llegaron, 0) || it.cantidad),
+        known: true,
+      }))
+    );
+    notify.info("Repuestos copiados de la hoja", "Revisa cantidades y pon los precios de la factura.");
+  }
 
   useEffect(() => {
     loadLedger(current);
@@ -576,7 +613,9 @@ export default function ComprasPage() {
 
     setSaving(true);
     setFormError(null);
-    const { data, error } = await supabase.rpc("create_purchase_invoice", {
+    const conHoja = !!hojaId;
+    const { data, error } = await supabase.rpc(conHoja ? "crear_factura_compra" : "create_purchase_invoice", {
+      ...(conHoja ? { p_order_id: hojaId } : {}),
       p_supplier_id: supplierId,
       p_number: number,
       p_date: date,
@@ -615,6 +654,16 @@ export default function ComprasPage() {
     setCurrent(supplierId);
     loadSuppliers();
     loadLedger(supplierId);
+    if (conHoja) {
+      const ir = await confirmar({
+        titulo: "¿Registrar ahora lo que llegó?",
+        mensaje:
+          "La factura quedó enlazada a la hoja. La mercancía entra al estante cuando registras lo que llegó; ahí se reparte a los clientes de la hoja.",
+        textoSi: "Sí, registrar lo que llegó",
+        textoNo: "Después",
+      });
+      if (ir) router.push(`/pedidos?hoja=${hojaId}&llego=1`);
+    }
   }
 
   // ---------- pagos ----------
@@ -788,6 +837,30 @@ export default function ComprasPage() {
               />
             </div>
           </div>
+
+          {supplierId && hojasProv.length > 0 && (
+            <div className="flex items-center gap-2 rounded-lg border border-brand-100 bg-brand-50/40 px-3 py-2 mb-3 flex-wrap">
+              <span className="text-[13px] text-gray-700">¿Viene de una hoja de pedido?</span>
+              <select value={hojaId} onChange={(e) => setHojaId(e.target.value)} className="h-8 px-2 border border-gray-200 rounded-lg text-[13px] bg-white">
+                <option value="">No, es una compra suelta</option>
+                {hojasProv.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    P-{String(h.numero).padStart(4, "0")} · {fechaCorta(h.fecha)} · {h.status === "ABIERTO" ? "esperando" : "recibida"}
+                  </option>
+                ))}
+              </select>
+              {hojaId && (
+                <button onClick={copiarDeHoja} className="h-8 px-3 rounded-lg text-[12.5px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300">
+                  Copiar repuestos de la hoja
+                </button>
+              )}
+              <span className="w-full text-[11.5px] text-gray-500">
+                {hojaId
+                  ? "Esta factura no suma al estante: lo suma «Llegó la mercancía» de la hoja, y el sistema compara pedido, llegada y factura."
+                  : "Compra suelta: lo que pongas aquí entra al estante y se entrega solo a los clientes que estén esperando."}
+              </span>
+            </div>
+          )}
 
           <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2 mb-3 flex-wrap">
             <span className="text-sm text-gray-600">Descuento general</span>
