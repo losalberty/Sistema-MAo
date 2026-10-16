@@ -8,9 +8,11 @@
      3. Llego      -> se reparte a los clientes de esa hoja
    ============================================================ */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowRight,
   Ban,
   CalendarDays,
@@ -49,6 +51,7 @@ type LineaCliente = {
   fecha: string;
   cliente: string;
   telefono: string | null;
+  tipo?: string;
   product_id: string;
   code: string;
   description: string;
@@ -93,6 +96,8 @@ type HojaLista = {
   lineas: number;
   unidades: number;
   llegaron: number;
+  facturado?: number;
+  facturas?: number;
   clientes: number;
   nombres: string | null;
 };
@@ -105,6 +110,7 @@ type Para = {
   cliente: string;
   cantidad: number;
   recibido: number;
+  le_falta?: number;
 };
 
 type Otro = { note_id: string; numero: number; fecha: string; cliente: string; falta: number };
@@ -116,6 +122,7 @@ type ItemHoja = {
   description: string;
   cantidad: number;
   llegaron: number;
+  facturado?: number;
   falta: number;
   para: Para[];
   otros: Otro[];
@@ -132,6 +139,7 @@ type Hoja = {
   nota: string | null;
   invoice_id: string | null;
   factura: string | null;
+  facturas?: { id: string; numero: string; fecha: string; total: number }[];
   items: ItemHoja[];
 };
 
@@ -216,6 +224,15 @@ function Check3({ estado, onClick, label }: { estado: "si" | "no" | "medio"; onC
    ============================================================ */
 
 export default function PedidosPage() {
+  return (
+    <Suspense fallback={null}>
+      <Pedidos />
+    </Suspense>
+  );
+}
+
+function Pedidos() {
+  const params = useSearchParams();
   const [data, setData] = useState<PorPedir | null>(null);
   const [hojas, setHojas] = useState<HojaLista[]>([]);
   const [provs, setProvs] = useState<Proveedor[]>([]);
@@ -254,6 +271,15 @@ export default function PedidosPage() {
   useEffect(() => {
     cargar();
   }, [cargar]);
+
+  // viene de Facturas de compra: abrir la hoja y "Llego la mercancia"
+  useEffect(() => {
+    const h = params.get("hoja");
+    if (!h) return;
+    setTab("hojas");
+    setHojaId(h);
+    if (params.get("llego") === "1") setLlegoId(h);
+  }, [params]);
 
   /* ---------- filtros ---------- */
   const coincide = useCallback(
@@ -512,7 +538,7 @@ export default function PedidosPage() {
 
           <p className="text-[12px] text-gray-500 mb-3 flex items-center gap-1.5">
             <Hourglass size={13} className="text-gray-400" />
-            Esto se llena solo con cada nota que lleva repuestos bajo pedido. Marca lo que quieras pedir y pulsa{" "}
+            Se llena solo: cada nota toma primero del estante y lo que no alcanza aparece aquí con el nombre del cliente. Marca lo que quieras pedir y pulsa{" "}
             <b className="font-medium text-gray-700">Crear hoja de pedido</b>.
           </p>
 
@@ -525,7 +551,7 @@ export default function PedidosPage() {
           {!cargando && clientes.length === 0 && almacen.length === 0 && (
             <div className="bg-white border border-gray-200 rounded-xl">
               <EmptyState icon={PackageCheck} title="No hay nada por pedir">
-                Cuando hagas una nota con un repuesto bajo pedido, aparece aquí sola, con el nombre del cliente.
+                Cuando una nota pide más de lo que hay en el estante, lo que falta aparece aquí solo, con el nombre del cliente.
               </EmptyState>
             </div>
           )}
@@ -722,6 +748,17 @@ export default function PedidosPage() {
                       {h.clientes > 0 ? `Para ${h.nombres}` : "Para el estante"} · {h.lineas}{" "}
                       {h.lineas === 1 ? "repuesto" : "repuestos"}
                     </p>
+                    {(h.facturas ?? 0) > 0 && (h.facturado ?? 0) > h.llegaron + 0.005 && (
+                      <p className="mt-1 text-[11.5px] text-red-600 flex items-center gap-1">
+                        <AlertTriangle size={12} /> Te facturaron {num((h.facturado ?? 0) - h.llegaron)} que no han llegado
+                      </p>
+                    )}
+                    {h.llegaron > 0.005 && (h.facturado ?? 0) + 0.005 < h.llegaron && (
+                      <p className="mt-1 text-[11.5px] text-amber-700 flex items-center gap-1">
+                        <FileText size={12} />{" "}
+                        {(h.facturas ?? 0) === 0 ? "Llegó mercancía sin factura" : `Faltan ${num(h.llegaron - (h.facturado ?? 0))} por facturar`}
+                      </p>
+                    )}
                     <div className="mt-2.5 flex items-center gap-2">
                       <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
                         <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
@@ -829,7 +866,12 @@ function FilaCliente({
         <>
           <Avatar nombre={l.cliente} size={24} />
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] text-gray-900 truncate">{l.cliente}</p>
+            <p className="text-[13px] text-gray-900 truncate">
+              {l.cliente}
+              {l.tipo === "ALMACEN" && (
+                <span className="ml-2 text-[10.5px] px-1.5 py-px rounded bg-amber-50 text-amber-800">no alcanzó el estante</span>
+              )}
+            </p>
             <p className="text-[11.5px] text-gray-500">
               Nota #{l.numero} · {fechaCorta(l.fecha)} · {haceDias(l.fecha)}
             </p>
@@ -1734,8 +1776,15 @@ function HojaDetalle({
                     {it.description}
                   </p>
                   <p className="text-[11.5px] text-gray-500">
-                    {it.llegaron > 0 ? `llegaron ${num(it.llegaron)} de ${num(it.cantidad)}` : "todavía no llega"}
+                    Pedido {num(it.cantidad)} · llegó {num(it.llegaron)}
+                    {(h.facturas?.length ?? 0) > 0 && <> · facturado {num(it.facturado ?? 0)}</>}
                   </p>
+                  {(h.facturas?.length ?? 0) > 0 && (it.facturado ?? 0) > it.llegaron + 0.005 && (
+                    <p className="text-[11px] text-red-600">Te cobran {num((it.facturado ?? 0) - it.llegaron)} que no han llegado</p>
+                  )}
+                  {(h.facturas?.length ?? 0) > 0 && it.llegaron > (it.facturado ?? 0) + 0.005 && (
+                    <p className="text-[11px] text-amber-700">Llegaron {num(it.llegaron - (it.facturado ?? 0))} sin factura</p>
+                  )}
                 </div>
                 {abierta ? (
                   <CantidadEditable
@@ -1798,8 +1847,11 @@ function HojaDetalle({
           <Link2 size={14} className="text-gray-400" />
           {h.factura ? (
             <>
-              Factura de compra enlazada: <b className="font-medium">{h.factura}</b>
-              <button onClick={() => enlazar(null)} className="ml-auto text-[12px] text-gray-500 hover:text-red-600">
+              {(h.facturas?.length ?? 1) > 1 ? "Facturas enlazadas" : "Factura enlazada"}: <b className="font-medium">{h.factura}</b>
+              <button onClick={verFacturas} className="ml-auto text-[12px] text-brand-700 hover:underline">
+                Agregar otra
+              </button>
+              <button onClick={() => enlazar(null)} className="text-[12px] text-gray-500 hover:text-red-600">
                 Quitar
               </button>
             </>
@@ -1814,7 +1866,7 @@ function HojaDetalle({
         </p>
         {!h.factura && (
           <p className="text-[11.5px] text-gray-500 mt-1">
-            Si la enlazas antes de recibir, el stock lo suma la factura y no se cuenta dos veces.
+            La mercancía la suma «Llegó la mercancía»; la factura es lo que le debes al proveedor. Así nada se cuenta dos veces.
           </p>
         )}
         {facturas && (
@@ -1874,8 +1926,11 @@ function Llego({ id, onClose, onHecho }: { id: string; onClose: () => void; onHe
       const l: Record<string, number> = {};
       const r: Record<string, Record<string, number>> = {};
       for (const it of hoja.items.filter((i) => i.falta > 0.005)) {
-        l[it.id] = it.falta;
-        r[it.id] = repartoAuto(it.falta, destinosDe(it));
+        // si hay factura, se propone lo facturado que todavia no ha llegado
+        const porFactura = (it.facturado ?? 0) - it.llegaron;
+        const v = (hoja.facturas?.length ?? 0) > 0 && porFactura > 0.005 ? Math.min(porFactura, it.falta) : it.falta;
+        l[it.id] = v;
+        r[it.id] = repartoAuto(v, destinosDe(it));
       }
       setLlego(l);
       setRep(r);
@@ -1885,8 +1940,14 @@ function Llego({ id, onClose, onHecho }: { id: string; onClose: () => void; onHe
   function destinosDe(it: ItemHoja): Destino[] {
     return [
       ...it.para
-        .filter((p) => p.cantidad - p.recibido > 0.005)
-        .map((p) => ({ note_id: p.note_id, cliente: p.cliente, numero: p.numero, espera: p.cantidad - p.recibido, deEstaHoja: true })),
+        .map((p) => ({
+          note_id: p.note_id,
+          cliente: p.cliente,
+          numero: p.numero,
+          espera: Math.min(p.cantidad - p.recibido, p.le_falta ?? p.cantidad - p.recibido),
+          deEstaHoja: true,
+        }))
+        .filter((d) => d.espera > 0.005),
       ...it.otros.map((o) => ({ note_id: o.note_id, cliente: o.cliente, numero: o.numero, espera: o.falta, deEstaHoja: false })),
     ];
   }
@@ -1984,7 +2045,10 @@ function Llego({ id, onClose, onHecho }: { id: string; onClose: () => void; onHe
                     <span className="font-mono text-[11.5px] text-gray-500 mr-2">{it.code}</span>
                     {it.description}
                   </p>
-                  <p className="text-[11.5px] text-gray-500">Esperabas {num(it.falta)}</p>
+                  <p className="text-[11.5px] text-gray-500">
+                    Esperabas {num(it.falta)}
+                    {(h.facturas?.length ?? 0) > 0 && <> · facturado {num(it.facturado ?? 0)}</>}
+                  </p>
                 </div>
                 <label className="text-[12px] text-gray-600 flex items-center gap-2">
                   Llegaron
