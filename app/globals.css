@@ -104,6 +104,7 @@
 }
 
 
+
 /* ============================================================
    Modo oscuro (se activa con el boton de la luna, arriba)
    Las reglas de abajo se generan solas a partir de los colores
@@ -135,7 +136,6 @@ html.dark{color-scheme:dark}
 .dark .bg-blue-50{background-color:rgba(59,130,246,0.120)}
 .dark .bg-brand-200{background-color:#263661}
 .dark .bg-brand-50{background-color:#18223b}
-.dark .bg-brand-50\/30{background-color:rgba(24,34,59,0.30)}
 .dark .bg-brand-50\/40{background-color:rgba(24,34,59,0.40)}
 .dark .bg-brand-50\/50{background-color:rgba(24,34,59,0.50)}
 .dark .bg-brand-50\/60{background-color:rgba(24,34,59,0.60)}
@@ -165,7 +165,6 @@ html.dark{color-scheme:dark}
 .dark .bg-violet-50{background-color:rgba(139,92,246,0.120)}
 .dark .bg-white{background-color:#121722}
 .dark .bg-white\/95{background-color:rgba(18,23,34,0.95)}
-.dark .border-amber-100{border-color:rgba(245,158,11,.35)}
 .dark .border-amber-200{border-color:rgba(245,158,11,.35)}
 .dark .border-amber-300{border-color:rgba(245,158,11,.35)}
 .dark .border-brand-100{border-color:#2d3f6b}
@@ -184,7 +183,6 @@ html.dark{color-scheme:dark}
 .dark .border-red-100{border-color:rgba(239,68,68,.35)}
 .dark .border-red-200{border-color:rgba(239,68,68,.35)}
 .dark .border-red-300{border-color:rgba(239,68,68,.35)}
-.dark .border-sky-100{border-color:rgba(14,165,233,.35)}
 .dark .border-violet-100{border-color:rgba(139,92,246,.35)}
 .dark .disabled\:bg-gray-50:disabled{background-color:#151b27}
 .dark .disabled\:text-gray-400:disabled{color:#6b7489}
@@ -265,7 +263,10 @@ html.dark{color-scheme:dark}
 .dark .text-red-800{color:#fca5a5}
 .dark .text-sky-700{color:#7dd3fc}
 .dark .text-sky-800{color:#7dd3fc}
-.dark .text-sky-900{color:#7dd3fc}
 .dark .text-violet-700{color:#c4b5fd}
 .dark .text-violet-800{color:#c4b5fd}
 .dark .text-violet-900{color:#c4b5fd}
+.dark .bg-brand-50\/30{background-color:rgba(24,34,59,0.30)}
+.dark .border-amber-100{border-color:rgba(245,158,11,.35)}
+.dark .border-sky-100{border-color:rgba(14,165,233,.35)}
+.dark .text-sky-900{color:#7dd3fc}
