@@ -19,6 +19,9 @@ export function useAlClicFuera(
     if (!abierto) return;
     function clic(e: MouseEvent | TouchEvent) {
       const el = ref.current;
+      // los menus que se dibujan flotando fuera (portal) cuentan como "adentro"
+      const t = e.target as Element | null;
+      if (t && typeof t.closest === "function" && t.closest("[data-menu-flotante]")) return;
       if (el && !el.contains(e.target as Node)) cerrar();
     }
     function tecla(e: KeyboardEvent) {
