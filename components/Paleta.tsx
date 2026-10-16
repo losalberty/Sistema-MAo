@@ -73,6 +73,7 @@ const PANTALLAS: Opcion[] = [
   { grupo: "Ir a", titulo: "Devoluciones", icono: Undo2, ir: "/devoluciones" },
   { grupo: "Ir a", titulo: "Clientes", icono: Users, ir: "/clientes" },
   { grupo: "Ir a", titulo: "Pedidos", icono: ClipboardList, ir: "/pedidos" },
+  { grupo: "Ir a", titulo: "Ajustes", icono: ClipboardList, ir: "/ajustes" },
   { grupo: "Ir a", titulo: "Facturas de compra", icono: Receipt, ir: "/compras" },
   { grupo: "Ir a", titulo: "Productos", icono: Package, ir: "/productos" },
   { grupo: "Ir a", titulo: "Inventario", icono: Boxes, ir: "/inventario" },
