@@ -536,6 +536,16 @@ type MarcoProps = {
 function MarcoDinamic(p: MarcoProps) {
   const navRef = useRef<HTMLDivElement>(null);
   const [pastilla, setPastilla] = useState<{ x: number; w: number } | null>(null);
+  // a donde vas: la pastilla negra se mueve en cuanto tocas, sin esperar a que cargue la pantalla
+  const [destino, setDestino] = useState<string | null>(null);
+  useEffect(() => {
+    setDestino(null);
+  }, [p.pathname]);
+  const activa = (href: string) => (destino ? href === destino : p.isActive(href));
+  const ir = (href: string) => {
+    setDestino(href);
+    p.onIr(href);
+  };
   const [verTasas, setVerTasas] = useState(false);
   const [verYo, setVerYo] = useState(false);
   const cajaTasas = useRef<HTMLDivElement>(null);
@@ -560,7 +570,7 @@ function MarcoDinamic(p: MarcoProps) {
   }, []);
   useLayoutEffect(() => {
     medir();
-  }, [p.pathname, medir]);
+  }, [p.pathname, destino, medir]);
   useEffect(() => {
     window.addEventListener("resize", medir);
     // cuando termina de cargar la letra, las pastillas cambian de ancho: se vuelve a medir
@@ -593,12 +603,12 @@ function MarcoDinamic(p: MarcoProps) {
       {/* ---------- barra negra flotante (atajos) ---------- */}
       <aside className="sn-d-dock print:hidden" aria-label="Atajos">
         {atajo("Buscar · Ctrl K", Search, p.onBuscar)}
-        {p.pathname !== "/notas/nueva" && atajo("Nueva nota · N", Plus, () => p.onIr("/notas/nueva"), "sn-d-atajo-am")}
-        {atajo("Cobrar", HandCoins, () => p.onIr("/cobranzas"), p.isActive("/cobranzas") ? "sn-d-on" : "")}
-        {atajo("Pedidos", ClipboardList, () => p.onIr("/pedidos"), p.isActive("/pedidos") ? "sn-d-on" : "")}
-        {atajo("Inventario", Boxes, () => p.onIr("/inventario"), p.isActive("/inventario") ? "sn-d-on" : "")}
+        {p.pathname !== "/notas/nueva" && atajo("Nueva nota · N", Plus, () => ir("/notas/nueva"), "sn-d-atajo-am")}
+        {atajo("Cobrar", HandCoins, () => ir("/cobranzas"), activa("/cobranzas") ? "sn-d-on" : "")}
+        {atajo("Pedidos", ClipboardList, () => ir("/pedidos"), activa("/pedidos") ? "sn-d-on" : "")}
+        {atajo("Inventario", Boxes, () => ir("/inventario"), activa("/inventario") ? "sn-d-on" : "")}
         <hr />
-        {atajo("Ajustes y temas", Settings, () => p.onIr("/ajustes"), p.isActive("/ajustes") ? "sn-d-on" : "")}
+        {atajo("Ajustes y temas", Settings, () => ir("/ajustes"), activa("/ajustes") ? "sn-d-on" : "")}
         {atajo(p.oscuro ? "Modo claro" : "Modo oscuro", p.oscuro ? Sun : Moon, p.onTema)}
       </aside>
 
@@ -715,10 +725,21 @@ function MarcoDinamic(p: MarcoProps) {
           <nav ref={navRef} className="sn-d-pastillas" aria-label="Menú">
             {pastilla && <span className="sn-d-indicador" style={{ transform: `translateX(${pastilla.x}px)`, width: pastilla.w }} />}
             {PILDORAS.map((it) => {
-              const on = p.isActive(it.href);
+              const on = activa(it.href);
               const n = it.aviso === "vencidas" ? p.avisos?.vencidas_count ?? 0 : it.aviso === "reponer" ? p.avisos?.reponer ?? 0 : 0;
               return (
-                <Link key={it.href} href={it.href} data-activo={on ? "1" : "0"} title={it.label} className={`sn-d-pildora ${on ? "sn-d-pildora-on" : ""}`}>
+                <Link
+                  key={it.href}
+                  href={it.href}
+                  data-activo={on ? "1" : "0"}
+                  title={it.label}
+                  className={`sn-d-pildora ${on ? "sn-d-pildora-on" : ""}`}
+                  onClick={(e) => {
+                    // con Ctrl o en otra pestaña no se mueve nada aqui
+                    if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                    setDestino(it.href);
+                  }}
+                >
                   {it.corto}
                   {n > 0 && (
                     <span
