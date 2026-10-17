@@ -36,6 +36,7 @@ import {
 import { Barra, Campo, Encabezado, Lateral, Segmento, Tarjeta, Ventana, descargarExcel, inputCls } from "@/components/Ventana";
 import { leerFilas } from "@/components/Excel";
 import { useStockVivo } from "@/components/StockVivo";
+import { TituloLetras, useEstilo } from "@/components/Estilo";
 
 type StockRow = {
   id: string;
@@ -156,6 +157,8 @@ export default function InventarioPage() {
   const [visibles, setVisibles] = useState(POR_PAGINA);
 
   const [kardexId, setKardexId] = useState<string | null>(null);
+  // tema Dinamic: numeros grandes con circulo y barra de existencia en cada repuesto
+  const din = useEstilo() === "dinamic";
   const [showImport, setShowImport] = useState(false);
   const [showMinimos, setShowMinimos] = useState(false);
   const [showAjuste, setShowAjuste] = useState(false);
@@ -333,9 +336,56 @@ export default function InventarioPage() {
 
   return (
     <main className="p-6 max-w-[1180px]">
-      <Encabezado titulo="Inventario">Cuánto tienes de cada repuesto y cuáles le pides al proveedor cuando los vendes.</Encabezado>
+      {din ? (
+        <div className="sn-p-cabeza print:hidden">
+          <TituloLetras lineas={["Inventario"]} />
+          <p className="sn-p-sub">Cuánto tienes de cada repuesto y cuáles le pides al proveedor cuando los vendes.</p>
+          {resumen && (
+            <div className="sn-kpis">
+              <div className="sn-kpi">
+                <span className="sn-kpi-ic">
+                  <DollarSign size={17} />
+                </span>
+                <div>
+                  <b>${money(resumen.valor)}</b>
+                  <small>en el estante, a costo</small>
+                </div>
+              </div>
+              <button type="button" className={`sn-kpi ${filtro === "ESPERANDO" ? "sn-kpi-on" : ""}`} onClick={() => setFiltro("ESPERANDO")}>
+                <span className="sn-kpi-ic sn-kpi-violeta">
+                  <ClipboardList size={17} />
+                </span>
+                <div>
+                  <b>{resumen.esperando ?? 0}</b>
+                  <small>clientes esperando · {num(resumen.apartado_unidades ?? 0)} apartadas</small>
+                </div>
+              </button>
+              <button type="button" className={`sn-kpi ${filtro === "REPONER" ? "sn-kpi-on" : ""}`} onClick={() => setFiltro("REPONER")}>
+                <span className={`sn-kpi-ic ${resumen.reponer > 0 ? "sn-kpi-amarillo" : ""}`}>
+                  <ArrowDownToLine size={17} />
+                </span>
+                <div>
+                  <b>{resumen.reponer}</b>
+                  <small>{resumen.agotados ? `por reponer · ${resumen.agotados} en 0` : "por reponer"}</small>
+                </div>
+              </button>
+              <button type="button" className={`sn-kpi ${filtro === "PEDIDO" ? "sn-kpi-on" : ""}`} onClick={() => setFiltro("PEDIDO")}>
+                <span className="sn-kpi-ic">
+                  <Warehouse size={17} />
+                </span>
+                <div>
+                  <b>{resumen.pedido}</b>
+                  <small>bajo pedido · {resumen.almacen} de almacén</small>
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <Encabezado titulo="Inventario">Cuánto tienes de cada repuesto y cuáles le pides al proveedor cuando los vendes.</Encabezado>
+      )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+      <div className="sn-i-info grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
         <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 flex gap-3">
           <span className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
             <Warehouse size={17} />
@@ -356,7 +406,7 @@ export default function InventarioPage() {
         </div>
       </div>
 
-      <div className="sticky top-[52px] z-20 -mx-6 px-6 pt-2 bg-[#f5f6f8]/85 backdrop-blur-md print:static">
+      <div className="sn-i-pegado sticky top-[52px] z-20 -mx-6 px-6 pt-2 bg-[#f5f6f8]/85 backdrop-blur-md print:static">
       <Barra>
         <ToolbarButton icon={SlidersHorizontal} label="ajustar stock" tone="brand" onClick={() => setShowAjuste(true)} />
         <ToolbarButton icon={Upload} label="cargar desde Excel" onClick={() => setShowImport(true)} />
@@ -379,7 +429,7 @@ export default function InventarioPage() {
         <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
       )}
 
-      {resumen && (
+      {resumen && !din && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
           <Tarjeta
             label="Valor en el estante"
@@ -435,8 +485,8 @@ export default function InventarioPage() {
         />
       )}
 
-      <div className="bg-white border border-gray-200 rounded-xl shadow-card overflow-hidden">
-        <div className="flex gap-2 items-center p-2.5 border-b border-gray-100">
+      <div className="sn-i-caja bg-white border border-gray-200 rounded-xl shadow-card overflow-hidden">
+        <div className="sn-i-busca flex gap-2 items-center p-2.5 border-b border-gray-100">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -459,7 +509,7 @@ export default function InventarioPage() {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2 items-center px-2.5 py-2 border-b border-gray-100 text-[12px]">
+        <div className="sn-i-marcar flex flex-wrap gap-2 items-center px-2.5 py-2 border-b border-gray-100 text-[12px]">
           <span className="text-gray-400">seleccionar:</span>
           <select
             onChange={(e) => {
@@ -501,7 +551,7 @@ export default function InventarioPage() {
           )}
         </div>
 
-        <div className="flex gap-2.5 items-center px-3 py-1.5 border-b border-gray-100 text-[10.5px] uppercase tracking-wide text-gray-400">
+        <div className="sn-i-cols flex gap-2.5 items-center px-3 py-1.5 border-b border-gray-100 text-[10.5px] uppercase tracking-wide text-gray-400">
           <input
             type="checkbox"
             checked={todoMarcado}
@@ -558,7 +608,7 @@ export default function InventarioPage() {
             <div
               key={r.id}
               onDoubleClick={() => setKardexId(r.id)}
-              className={`group flex gap-2.5 items-center px-3 h-9 border-b border-gray-50 text-[12.5px] ${
+              className={`sn-i-fila group flex gap-2.5 items-center px-3 h-9 border-b border-gray-50 text-[12.5px] ${
                 on ? "bg-brand-50/70" : idx % 2 ? "bg-gray-50/40 hover:bg-gray-50" : "hover:bg-gray-50"
               }`}
             >
@@ -569,7 +619,7 @@ export default function InventarioPage() {
                 className="w-3 h-3 shrink-0 accent-brand-700"
                 aria-label={`Marcar ${r.code}`}
               />
-              <span className="w-[92px] font-mono text-[10.5px] text-gray-500 shrink-0 truncate">{r.code}</span>
+              <span className="sn-i-cod w-[92px] font-mono text-[10.5px] text-gray-500 shrink-0 truncate">{r.code}</span>
               <span className="flex-1 min-w-0 truncate">
                 <button
                   onClick={() => setKardexId(r.id)}
@@ -578,9 +628,24 @@ export default function InventarioPage() {
                   {r.description}
                 </button>
                 {r.supplier_name && <span className="ml-2 text-[10.5px] text-gray-400">{r.supplier_name}</span>}
+                {/* Dinamic: barra de cuanto queda (contra el doble del minimo) */}
+                {din && r.supply_type !== "PEDIDO" && (
+                  <span className="sn-i-barra" aria-hidden="true">
+                    <span
+                      className={r.stock <= 0 ? "sn-i-barra-roja" : r.estado === "REPONER" ? "sn-i-barra-ambar" : "sn-i-barra-verde"}
+                      style={{
+                        width: `${
+                          r.stock <= 0
+                            ? 4
+                            : Math.max(6, Math.min(100, (r.stock / Math.max(r.min_stock * 2, r.stock > 10 ? r.stock : 10)) * 100))
+                        }%`,
+                      }}
+                    />
+                  </span>
+                )}
               </span>
               <span
-                className={`w-14 text-right shrink-0 font-medium ${
+                className={`sn-i-hay w-14 text-right shrink-0 font-medium ${
                   r.estado === "REPONER" && r.stock <= 0
                     ? "text-red-600"
                     : r.estado === "REPONER"
@@ -632,7 +697,7 @@ export default function InventarioPage() {
           </div>
         )}
 
-        <div className="flex items-center gap-3 px-3 py-2 bg-gray-50 text-[11.5px]">
+        <div className="sn-i-pie flex items-center gap-3 px-3 py-2 bg-gray-50 text-[11.5px]">
           <span className="text-gray-400">clic en la descripcion abre el historial · ahi mismo ajustas la cantidad</span>
           <span className="ml-auto text-gray-500">
             valor en la vista <b className="font-medium text-gray-900">${money(totalVista)}</b>
@@ -641,7 +706,7 @@ export default function InventarioPage() {
       </div>
 
       {sel.size > 0 && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 pl-4 pr-1.5 py-1.5 rounded-2xl bg-gray-900 text-white shadow-pop print:hidden max-w-[calc(100vw-24px)] overflow-x-auto">
+        <div className="sn-p-seleccion fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 pl-4 pr-1.5 py-1.5 rounded-2xl bg-gray-900 text-white shadow-pop print:hidden max-w-[calc(100vw-24px)] overflow-x-auto">
           <span className="text-[13px] whitespace-nowrap mr-2">
             <b className="font-semibold">{sel.size}</b> {sel.size === 1 ? "marcado" : "marcados"}
           </span>
