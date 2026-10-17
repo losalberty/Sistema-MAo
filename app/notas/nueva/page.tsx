@@ -1690,7 +1690,7 @@ function NuevaNotaInner() {
         </div>
 
         {/* =================== derecha: resumen fijo =================== */}
-        <aside className="lg:sticky lg:top-[68px] bg-white border border-gray-200 rounded-xl shadow-card p-4">
+        <aside className="sn-resumen lg:sticky lg:top-[68px] bg-white border border-gray-200 rounded-xl shadow-card p-4">
           <p className="text-[12px] font-medium text-gray-500 mb-2">Moneda de la nota</p>
           <div role="radiogroup" aria-label="Moneda de la nota" className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-gray-100 mb-3">
             {MONEDAS.map((m) => {
@@ -1809,7 +1809,7 @@ function NuevaNotaInner() {
           <button
             disabled={saving || items.length === 0 || (!!currentId && !dirty)}
             onClick={saveNote}
-            className="mt-4 w-full h-11 rounded-[10px] inline-flex items-center justify-center gap-2 text-[14px] font-medium text-white bg-gradient-to-b from-brand-600 to-brand-800 border border-brand-900 shadow-[inset_0_1px_0_rgba(255,255,255,.18),0_4px_12px_-4px_rgba(36,58,102,.55)] hover:brightness-110 disabled:opacity-40 disabled:pointer-events-none"
+            className="sn-guardar mt-4 w-full h-11 rounded-[10px] inline-flex items-center justify-center gap-2 text-[14px] font-medium text-white bg-gradient-to-b from-brand-600 to-brand-800 border border-brand-900 shadow-[inset_0_1px_0_rgba(255,255,255,.18),0_4px_12px_-4px_rgba(36,58,102,.55)] hover:brightness-110 disabled:opacity-40 disabled:pointer-events-none"
           >
             <Save size={16} />
             {saving ? "Guardando..." : currentId ? (dirty ? "Guardar cambios" : "Todo guardado") : "Guardar nota"}
