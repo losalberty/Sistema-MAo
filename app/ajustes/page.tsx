@@ -2,6 +2,7 @@
 
 /* ============================================================
    AJUSTES DEL SISTEMA
+   - Tema visual: Clásico (el de siempre) o Dinamic
    - Con que tipo nacen los repuestos nuevos
    - Punto de partida: desde que fecha se lleva la cuenta
    - Reiniciar pruebas (solo el administrador, con su clave)
@@ -12,6 +13,7 @@ import { CalendarCheck, ClipboardList, KeyRound, RotateCcw, ShieldCheck, Warehou
 import { supabase } from "@/lib/supabase";
 import { notify } from "@/components/ui";
 import { Encabezado, Segmento, Ventana, inputCls } from "@/components/Ventana";
+import { SelectorTema } from "@/components/Estilo";
 
 type Ajustes = {
   cuenta_desde: string | null;
@@ -197,6 +199,7 @@ export default function AjustesPage() {
     return (
       <main className="p-6 max-w-[900px]">
         <Encabezado titulo="Ajustes">Cargando…</Encabezado>
+        <SelectorTema />
       </main>
     );
 
@@ -205,6 +208,9 @@ export default function AjustesPage() {
   return (
     <main className="p-6 max-w-[900px]">
       <Encabezado titulo="Ajustes">Cómo trabaja el sistema y herramientas del administrador.</Encabezado>
+
+      {/* tema visual */}
+      <SelectorTema />
 
       {/* administrador */}
       <div className="mb-4 rounded-xl border border-gray-200 bg-white px-4 py-3 flex items-center gap-3">
