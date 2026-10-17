@@ -43,6 +43,7 @@ import { EmptyState, NumInput, Pill, SkeletonRows, confirmar, notify, type PillT
 import { Lateral, Segmento, Ventana, inputCls } from "@/components/Ventana";
 import { colorDe, iniciales } from "@/components/Paleta";
 import { useStockVivo } from "@/components/StockVivo";
+import { TituloLetras, useEstilo } from "@/components/Estilo";
 
 /* ---------------- tipos ---------------- */
 
@@ -233,6 +234,8 @@ export default function PedidosPage() {
 }
 
 function Pedidos() {
+  // tema Dinamic: titulo grande, pasos y hojas como fichas de color (el Clasico no cambia)
+  const din = useEstilo() === "dinamic";
   const params = useSearchParams();
   const [data, setData] = useState<PorPedir | null>(null);
   const [hojas, setHojas] = useState<HojaLista[]>([]);
@@ -418,18 +421,25 @@ function Pedidos() {
   const hojasVista = hojas.filter((h) => filtroHojas === "TODOS" || h.status === filtroHojas);
 
   return (
-    <main className="p-6 max-w-[1240px] pb-28">
+    <main className="sn-pd p-6 max-w-[1240px] pb-28">
       {/* ---------- encabezado ---------- */}
-      <div className="flex items-end justify-between gap-4 mb-4 flex-wrap">
+      <div className={`${din ? "sn-p-cabeza" : ""} flex items-end justify-between gap-4 mb-4 flex-wrap`}>
+        {din ? (
+          <div>
+            <TituloLetras lineas={["Pedidos"]} />
+            <p className="sn-p-sub">Lo que le falta a tus clientes, las hojas que le mandas al proveedor y lo que llegó.</p>
+          </div>
+        ) : (
         <div>
           <h1 className="text-[24px] font-semibold text-gray-900 tracking-tight">Pedidos a proveedores</h1>
           <p className="text-[13px] text-gray-500">
             Lo que le falta a tus clientes, las hojas que le mandas al proveedor y lo que llegó.
           </p>
         </div>
+        )}
         <button
           onClick={() => setNuevaVacia(true)}
-          className="h-9 px-3 rounded-[9px] inline-flex items-center gap-1.5 text-[13px] font-medium border border-gray-200 bg-white text-gray-700 hover:border-gray-300 whitespace-nowrap"
+          className="sn-pd-mano h-9 px-3 rounded-[9px] inline-flex items-center gap-1.5 text-[13px] font-medium border border-gray-200 bg-white text-gray-700 hover:border-gray-300 whitespace-nowrap"
         >
           <Plus size={15} /> Hoja a mano
         </button>
@@ -445,7 +455,7 @@ function Pedidos() {
       )}
 
       {/* ---------- los 3 pasos ---------- */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+      <div className="sn-pd-pasos grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
         {(
           [
             {
@@ -477,7 +487,7 @@ function Pedidos() {
           <button
             key={p.k}
             onClick={() => setTab(p.k)}
-            className={`text-left rounded-xl border px-4 py-3 transition-all ${
+            className={`sn-pd-paso ${tab === p.k ? "sn-pd-paso-on" : ""} text-left rounded-xl border px-4 py-3 transition-all ${
               tab === p.k
                 ? "border-brand-300 bg-white ring-2 ring-brand-100 shadow-card"
                 : "border-gray-200 bg-white hover:border-gray-300"
@@ -570,16 +580,16 @@ function Pedidos() {
               {porRepuesto.map((g) => {
                 const keys = g.lineas.map(kC);
                 return (
-                  <div key={g.info.product_id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <div key={g.info.product_id} className="sn-pd-grupo bg-white border border-gray-200 rounded-xl overflow-hidden">
                     <div
-                      className="flex items-center gap-3 px-4 py-2.5 bg-gray-50/70 border-b border-gray-100 cursor-pointer"
+                      className="sn-pd-gcab flex items-center gap-3 px-4 py-2.5 bg-gray-50/70 border-b border-gray-100 cursor-pointer"
                       onClick={() => alternar(keys)}
                     >
                       <Check3 estado={estadoDe(keys)} onClick={() => alternar(keys)} label={`Marcar todo ${g.info.code}`} />
                       <Package size={16} className="text-gray-400 shrink-0" />
                       <div className="min-w-0 flex-1">
                         <p className="text-[14px] text-gray-900 truncate">
-                          <span className="font-mono text-[12px] text-gray-500 mr-2">{g.info.code}</span>
+                          <span className="sn-pd-cod font-mono text-[12px] text-gray-500 mr-2">{g.info.code}</span>
                           {g.info.description}
                         </p>
                         <p className="text-[11.5px] text-gray-500">
@@ -588,7 +598,7 @@ function Pedidos() {
                         </p>
                       </div>
                       <span className="text-right">
-                        <span className="block text-[18px] font-semibold text-gray-900 leading-tight">{num(g.total)}</span>
+                        <span className="sn-pd-num block text-[18px] font-semibold text-gray-900 leading-tight">{num(g.total)}</span>
                         <span className="block text-[11px] text-gray-500">por pedir</span>
                       </span>
                     </div>
@@ -614,9 +624,9 @@ function Pedidos() {
               {porCliente.map((g) => {
                 const keys = g.lineas.map(kC);
                 return (
-                  <div key={g.info.note_id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <div key={g.info.note_id} className="sn-pd-grupo bg-white border border-gray-200 rounded-xl overflow-hidden">
                     <div
-                      className="flex items-center gap-3 px-4 py-2.5 bg-gray-50/70 border-b border-gray-100 cursor-pointer"
+                      className="sn-pd-gcab flex items-center gap-3 px-4 py-2.5 bg-gray-50/70 border-b border-gray-100 cursor-pointer"
                       onClick={() => alternar(keys)}
                     >
                       <Check3 estado={estadoDe(keys)} onClick={() => alternar(keys)} label={`Marcar todo de ${g.info.cliente}`} />
@@ -628,7 +638,7 @@ function Pedidos() {
                         </p>
                       </div>
                       <span className="text-right">
-                        <span className="block text-[18px] font-semibold text-gray-900 leading-tight">{num(g.total)}</span>
+                        <span className="sn-pd-num block text-[18px] font-semibold text-gray-900 leading-tight">{num(g.total)}</span>
                         <span className="block text-[11px] text-gray-500">unidades</span>
                       </span>
                     </div>
@@ -657,7 +667,7 @@ function Pedidos() {
               <p className="text-[12px] text-gray-500 mb-2">
                 Repuestos que guardas en estante y bajaron de su mínimo (o quedaron en negativo). No son de ningún cliente.
               </p>
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <div className="sn-pd-grupo bg-white border border-gray-200 rounded-xl overflow-hidden">
                 {almacen.map((l) => (
                   <div
                     key={kA(l)}
@@ -685,7 +695,7 @@ function Pedidos() {
 
           {/* ---- barra de seleccion ---- */}
           {sel.size > 0 && (
-            <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 pl-4 pr-2 py-2 rounded-2xl bg-gray-900 text-white shadow-pop">
+            <div className="sn-p-seleccion fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 pl-4 pr-2 py-2 rounded-2xl bg-gray-900 text-white shadow-pop">
               <span className="text-[13px]">
                 <b className="font-semibold">{num(selUnidades)}</b> unidades
                 {selClientes > 0 && (
@@ -704,7 +714,7 @@ function Pedidos() {
               </button>
               <button
                 onClick={() => setCrear(true)}
-                className="h-9 px-4 rounded-xl bg-white text-gray-900 text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-gray-100 whitespace-nowrap"
+                className="sn-pd-crear h-9 px-4 rounded-xl bg-white text-gray-900 text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-gray-100 whitespace-nowrap"
               >
                 Crear hoja de pedido <ArrowRight size={15} />
               </button>
@@ -742,16 +752,16 @@ function Pedidos() {
                   <button
                     key={h.id}
                     onClick={() => setHojaId(h.id)}
-                    className="text-left bg-white border border-gray-200 rounded-xl px-4 py-3 hover:border-gray-300 hover:shadow-card transition-all"
+                    className={`sn-pd-hoja sn-pd-hoja-${h.status === "ABIERTO" ? (h.llegaron > 0.005 ? "parte" : "abierta") : "cerrada"} text-left bg-white border border-gray-200 rounded-xl px-4 py-3 hover:border-gray-300 hover:shadow-card transition-all`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[12px] text-gray-500">{P(h.numero)}</span>
+                      <span className="sn-pd-cod font-mono text-[12px] text-gray-500">{P(h.numero)}</span>
                       <Pill tone={e.t}>{e.l}</Pill>
                       <span className="ml-auto text-[12px] text-gray-500 flex items-center gap-1">
                         <CalendarDays size={12} /> {fechaCorta(h.fecha)}
                       </span>
                     </div>
-                    <p className="text-[15px] font-medium text-gray-900 mt-1 truncate">{h.proveedor ?? "Sin proveedor"}</p>
+                    <p className="sn-pd-prov text-[15px] font-medium text-gray-900 mt-1 truncate">{h.proveedor ?? "Sin proveedor"}</p>
                     <p className="text-[12px] text-gray-500 truncate">
                       {h.clientes > 0 ? `Para ${h.nombres}` : "Para el estante"} · {h.lineas}{" "}
                       {h.lineas === 1 ? "repuesto" : "repuestos"}
@@ -768,7 +778,7 @@ function Pedidos() {
                       </p>
                     )}
                     <div className="mt-2.5 flex items-center gap-2">
-                      <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                      <div className="sn-pd-barra flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
                         <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
                       </div>
                       <span className="text-[11.5px] text-gray-600 whitespace-nowrap">
