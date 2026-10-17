@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowUpDown,
   Banknote,
   CalendarDays,
@@ -20,7 +21,9 @@ import {
   Filter,
   HandCoins,
   Inbox,
+  LayoutGrid,
   Link2,
+  List,
   MessageCircle,
   PanelRight,
   Pencil,
@@ -43,6 +46,7 @@ import { descargarExcel } from "@/components/Ventana";
 import { colorDe, iniciales } from "@/components/Paleta";
 import { tasaPara, useTasas } from "@/components/Tasas";
 import { useAlClicFuera } from "@/components/useFuera";
+import { TituloLetras, useEstilo } from "@/components/Estilo";
 
 type NoteRow = {
   id: string;
@@ -258,6 +262,26 @@ function Notas() {
   const dragAdds = useRef(true);
 
   const [panel, setPanel] = useState<{ id: string; abonar: boolean } | null>(null);
+
+  // ---------- tema Dinamic: tablero de fichas por estado (el Clasico sigue con su lista) ----------
+  const din = useEstilo() === "dinamic";
+  const [modo, setModo] = useState<"tablero" | "lista">(() => {
+    try {
+      return localStorage.getItem("notas_modo") === "lista" ? "lista" : "tablero";
+    } catch {
+      return "tablero";
+    }
+  });
+  function cambiarModo(m: "tablero" | "lista") {
+    setModo(m);
+    setSelected(new Set());
+    try {
+      localStorage.setItem("notas_modo", m);
+    } catch {}
+  }
+  const verTablero = din && modo === "tablero";
+  // de donde sale la ficha: la ventana crece desde la tarjeta que tocaste
+  const [origen, setOrigen] = useState<DOMRect | null>(null);
   const [devolverId, setDevolverId] = useState<string | null>(null);
   const [showBuscar, setShowBuscar] = useState(false);
   const buscador = useRef<HTMLInputElement>(null);
@@ -435,6 +459,21 @@ function Notas() {
     return [...list].sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * orden.dir);
   }, [delPeriodo, vista, monedas, search, orden]);
 
+  // el tablero usa el periodo, la moneda y el buscador; las columnas son los estados
+  const delTablero = useMemo(() => {
+    let list = delPeriodo.filter((n) => n.effective_status !== "ANULADO");
+    if (monedas.size > 0) list = list.filter((n) => monedas.has(n.currency_mode));
+    if (search.trim()) {
+      const q = search.trim().toLowerCase().replace(/^#/, "");
+      list = list.filter((n) => n.display_name.toLowerCase().includes(q) || String(n.sequence_number).includes(q));
+    }
+    return list;
+  }, [delPeriodo, monedas, search]);
+  const vencidasMonto = useMemo(
+    () => delPeriodo.filter((n) => vistaDe(n) === "VENCIDA").reduce((s, n) => s + n.pending_usd, 0),
+    [delPeriodo]
+  );
+
   // al cambiar el filtro se vuelve a mostrar solo la primera tanda
   useEffect(() => {
     setVisibles(POR_PAGINA);
@@ -530,6 +569,69 @@ function Notas() {
   return (
     <main className="p-6 max-w-[1240px] pb-28">
       {/* ---------- encabezado ---------- */}
+      {din ? (
+        <div className="sn-p-cabeza">
+          <div className="flex items-end gap-2.5 flex-wrap">
+            <div className="min-w-0">
+              <TituloLetras lineas={["Notas"]} />
+              <p className="sn-p-sub">
+                {conteo.TODAS} notas · {etiquetaPeriodo} {year}
+              </p>
+            </div>
+            <div className="flex-1" />
+            <div className="sn-p-modo" role="radiogroup" aria-label="Cómo ver las notas">
+              <button type="button" role="radio" aria-checked={modo === "tablero"} onClick={() => cambiarModo("tablero")}>
+                <LayoutGrid size={15} /> Tablero
+              </button>
+              <button type="button" role="radio" aria-checked={modo === "lista"} onClick={() => cambiarModo("lista")}>
+                <List size={15} /> Lista
+              </button>
+            </div>
+            <BotonSec icon={ScanSearch} label="Buscar a fondo" onClick={() => setShowBuscar(true)} />
+            {!verTablero && (
+              <BotonSec
+                icon={verGanancia ? EyeOff : TrendingUp}
+                label={verGanancia ? "Ocultar ganancia" : "Ver ganancia"}
+                onClick={() => setVerGanancia((v) => !v)}
+                activo={verGanancia}
+              />
+            )}
+            <BotonSec icon={Download} label="Exportar" onClick={exportar} />
+          </div>
+          <div className="sn-kpis">
+            <div className="sn-kpi">
+              <span className="sn-kpi-ic">
+                <TrendingUp size={17} />
+              </span>
+              <div>
+                <b>${miles(totals.anio)}</b>
+                <small>vendido en {year}</small>
+              </div>
+            </div>
+            <div className="sn-kpi">
+              <span className="sn-kpi-ic">
+                <HandCoins size={17} />
+              </span>
+              <div>
+                <b>${miles(totals.porCobrar)}</b>
+                <small>por cobrar</small>
+              </div>
+            </div>
+            <div className="sn-kpi">
+              <span className={`sn-kpi-ic ${conteo.VENCIDA > 0 ? "sn-kpi-rojo" : ""}`}>
+                <AlertTriangle size={17} />
+              </span>
+              <div>
+                <b>{conteo.VENCIDA}</b>
+                <small>
+                  vencida{conteo.VENCIDA === 1 ? "" : "s"}
+                  {vencidasMonto > 0.005 ? ` · $${miles(vencidasMonto)}` : ""}
+                </small>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="flex items-end gap-3 mb-1">
         <div className="min-w-0">
           <h1 className="text-[24px] font-semibold text-gray-900 tracking-tight">Notas</h1>
@@ -551,9 +653,11 @@ function Notas() {
         />
         <BotonSec icon={Download} label="Exportar" onClick={exportar} />
       </div>
+      )}
 
-      {/* ---------- pestañas ---------- */}
-      <div className="flex gap-1 border-b border-gray-200 mt-4 mb-3 overflow-x-auto">
+      {/* ---------- pestañas (en el tablero, las columnas ya son los estados) ---------- */}
+      {!verTablero && (
+      <div className="sn-p-tabs flex gap-1 border-b border-gray-200 mt-4 mb-3 overflow-x-auto">
         {VISTAS.map((v) => {
           const on = vista === v.k;
           const n = conteo[v.k];
@@ -584,14 +688,19 @@ function Notas() {
           );
         })}
       </div>
+      )}
 
       {error && (
         <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-xl shadow-card overflow-hidden flex">
+      <div
+        className={`sn-p-caja bg-white border border-gray-200 rounded-xl shadow-card overflow-hidden flex ${
+          verTablero ? "sn-p-caja-tablero" : ""
+        }`}
+      >
         {/* ---------- columna de periodos ---------- */}
-        <aside className="w-[118px] shrink-0 border-r border-gray-100 p-2.5 select-none bg-gray-50/40">
+        <aside className="sn-p-meses w-[118px] shrink-0 border-r border-gray-100 p-2.5 select-none bg-gray-50/40">
           <select
             value={year}
             onChange={(e) => {
@@ -662,7 +771,7 @@ function Notas() {
 
         {/* ---------- tabla ---------- */}
         <section className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 p-2.5 border-b border-gray-100">
+          <div className="sn-p-barra flex items-center gap-2 p-2.5 border-b border-gray-100">
             <div className="relative flex-1 max-w-[380px]">
               <Search
                 size={14}
@@ -743,12 +852,24 @@ function Notas() {
             )}
 
             <span className="ml-auto text-[11.5px] text-gray-400 hidden lg:block">
-              clic en el cliente abre la nota · arrastra para sumar
+              {verTablero ? "toca una ficha para abrir la nota" : "clic en el cliente abre la nota · arrastra para sumar"}
             </span>
           </div>
 
+          {verTablero ? (
+            <TableroNotas
+              notas={delTablero}
+              cargando={loading && notes.length === 0}
+              onAbrir={(id, rect) => {
+                setOrigen(rect);
+                setPanel({ id, abonar: false });
+              }}
+            />
+          ) : (
+          <>
+
           {/* encabezado de columnas */}
-          <div className="flex gap-3 items-center px-3 h-9 border-b border-gray-200 bg-gray-50/60 text-[11px] font-medium text-gray-400">
+          <div className="sn-p-cols flex gap-3 items-center px-3 h-9 border-b border-gray-200 bg-gray-50/60 text-[11px] font-medium text-gray-400">
             <span className="w-4 shrink-0" />
             {cabecera("fecha", "Nº", "w-[60px] shrink-0")}
             {cabecera("cliente", "Cliente", "flex-1 min-w-0")}
@@ -799,7 +920,7 @@ function Notas() {
                     entrarFila(n.id, e.currentTarget);
                   }}
                   onDoubleClick={() => setPanel({ id: n.id, abonar: false })}
-                  className={`group flex gap-3 items-center px-3 h-[50px] border-b border-gray-100 text-[13px] cursor-default transition-colors ${
+                  className={`sn-p-fila group flex gap-3 items-center px-3 h-[50px] border-b border-gray-100 text-[13px] cursor-default transition-colors ${
                     isSel ? "bg-brand-50/70" : "hover:bg-gray-50/80"
                   }`}
                 >
@@ -900,7 +1021,7 @@ function Notas() {
           )}
 
           {/* ---------- pie ---------- */}
-          <div className="flex items-center gap-3 px-3 py-2.5 border-t border-gray-200 bg-gray-50/80 text-[12px]">
+          <div className="sn-p-pie flex items-center gap-3 px-3 py-2.5 border-t border-gray-200 bg-gray-50/80 text-[12px]">
             <span className="text-gray-500">
               {filtered.length} nota{filtered.length === 1 ? "" : "s"} en la vista
             </span>
@@ -915,6 +1036,8 @@ function Notas() {
               por cobrar <b className="font-medium text-amber-700">${miles(totals.porCobrar)}</b>
             </span>
           </div>
+          </>
+          )}
         </section>
       </div>
 
@@ -924,7 +1047,7 @@ function Notas() {
           totals.selCount > 0 ? "translate-y-0 opacity-100" : "translate-y-24 opacity-0 pointer-events-none"
         }`}
       >
-        <div className="flex items-center gap-1 rounded-2xl bg-gray-900 text-white pl-4 pr-1.5 py-1.5 shadow-[0_20px_50px_-12px_rgba(0,0,0,.5)]">
+        <div className="sn-p-seleccion flex items-center gap-1 rounded-2xl bg-gray-900 text-white pl-4 pr-1.5 py-1.5 shadow-[0_20px_50px_-12px_rgba(0,0,0,.5)]">
           <span className="text-[13px] font-semibold mr-1">
             {totals.selCount} seleccionada{totals.selCount === 1 ? "" : "s"}
           </span>
@@ -967,7 +1090,12 @@ function Notas() {
           key={panel.id + (panel.abonar ? "-a" : "")}
           noteId={panel.id}
           abonarAlAbrir={panel.abonar}
-          onClose={() => setPanel(null)}
+          onClose={() => {
+            setPanel(null);
+            setOrigen(null);
+          }}
+          din={din}
+          origen={origen}
           onCambio={load}
           onDevolver={(id) => setDevolverId(id)}
           onEditar={(id) => router.push(`/notas/nueva?id=${id}`)}
@@ -989,6 +1117,114 @@ function Notas() {
       )}
 
     </main>
+  );
+}
+
+/* ================= tablero de fichas (solo tema Dinamic) ================= */
+
+const COLUMNAS: { k: Vista; t: string; punto: string; vacio: string }[] = [
+  { k: "VENCIDA", t: "Vencidas", punto: "sn-t-punto-rojo", vacio: "Nada vencido. Bien ahí." },
+  { k: "PENDIENTE", t: "Por cobrar", punto: "sn-t-punto-negro", vacio: "No hay notas por cobrar." },
+  { k: "ABONADA", t: "Abonadas", punto: "sn-t-punto-amarillo", vacio: "Ninguna nota a medio pagar." },
+  { k: "COBRADO", t: "Cobradas", punto: "sn-t-punto-verde", vacio: "Todavía no hay cobradas." },
+];
+
+function TableroNotas({
+  notas,
+  cargando,
+  onAbrir,
+}: {
+  notas: NoteRow[];
+  cargando: boolean;
+  onAbrir: (id: string, rect: DOMRect) => void;
+}) {
+  // cuantas fichas se ven en cada columna (el resto con "ver mas")
+  const [tope, setTope] = useState<Record<string, number>>({});
+  if (cargando) return <SkeletonRows rows={6} />;
+  return (
+    <div className="sn-tablero">
+      {COLUMNAS.map((c) => {
+        const lista = notas.filter((n) => vistaDe(n) === c.k);
+        if (c.k === "VENCIDA") lista.sort((a, b) => b.days_overdue - a.days_overdue);
+        else if (c.k === "COBRADO") lista.sort((a, b) => (a.note_date < b.note_date ? 1 : -1));
+        else lista.sort((a, b) => ((a.due_date ?? "9") > (b.due_date ?? "9") ? 1 : -1));
+        const suma = lista.reduce((s, n) => s + (c.k === "COBRADO" ? n.total : n.pending_usd), 0);
+        const max = tope[c.k] ?? (c.k === "COBRADO" ? 8 : 16);
+        return (
+          <section key={c.k} className="sn-t-col" aria-label={c.t}>
+            <header className="sn-t-cab">
+              <span className={`sn-t-punto ${c.punto}`} />
+              <b>{c.t}</b>
+              <span className="sn-t-n">{lista.length}</span>
+              <span className="sn-t-suma">${miles(suma)}</span>
+            </header>
+            <div className="sn-t-lista">
+              {lista.slice(0, max).map((n, i) => (
+                <FichaNota key={n.id} n={n} i={i} onAbrir={onAbrir} />
+              ))}
+              {lista.length === 0 && <p className="sn-t-vacio">{c.vacio}</p>}
+              {lista.length > max && (
+                <button type="button" className="sn-t-mas" onClick={() => setTope((t) => ({ ...t, [c.k]: max + 16 }))}>
+                  Ver {Math.min(16, lista.length - max)} más · faltan {lista.length - max}
+                </button>
+              )}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function FichaNota({ n, i, onAbrir }: { n: NoteRow; i: number; onAbrir: (id: string, rect: DOMRect) => void }) {
+  const v = vistaDe(n);
+  const neto = n.total - (n.returned_usd ?? 0);
+  const pct = neto > 0 ? Math.min((n.paid_usd / neto) * 100, 100) : 100;
+  const d = new Date(n.note_date + "T00:00:00");
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const venceEn = n.due_date ? Math.round((new Date(n.due_date + "T00:00:00").getTime() - hoy.getTime()) / 86400000) : null;
+  const dias = (k: number) => `${k} día${k === 1 ? "" : "s"}`;
+  const sup =
+    v === "VENCIDA"
+      ? `Venció hace ${dias(n.days_overdue)}`
+      : v === "COBRADO"
+      ? "Cobrada"
+      : v === "ABONADA"
+      ? `Abonada ${Math.round(pct)}%`
+      : venceEn === null
+      ? "Sin fecha de vencimiento"
+      : venceEn <= 0
+      ? "Vence hoy"
+      : `Vence en ${dias(venceEn)}`;
+  return (
+    <button
+      type="button"
+      className={`sn-t-ficha sn-e-${v.toLowerCase()}`}
+      style={{ animationDelay: `${Math.min(i, 12) * 35}ms` }}
+      onClick={(e) => onAbrir(n.id, e.currentTarget.getBoundingClientRect())}
+      title="Abrir la nota"
+    >
+      <span className="sn-t-sup">{sup}</span>
+      <span className="sn-t-nom">{n.display_name}</span>
+      <span className="sn-t-sub">
+        Nota #{n.sequence_number} · {d.getDate()} {MESES_CORTOS[d.getMonth()]} · {moneda(n.currency_mode).label}
+      </span>
+      {v === "ABONADA" && (
+        <span className="sn-t-barra">
+          <span style={{ width: `${pct}%` }} />
+        </span>
+      )}
+      <span className="sn-t-pie">
+        <span className="sn-t-monto">
+          ${money(v === "COBRADO" ? n.total : n.pending_usd)}
+          {v === "ABONADA" && <small> de ${money(neto)}</small>}
+        </span>
+        <span className="sn-t-av" style={{ background: colorDe(n.display_name) }}>
+          {iniciales(n.display_name)}
+        </span>
+      </span>
+    </button>
   );
 }
 
@@ -1146,7 +1382,11 @@ function PanelNota({
   onEditar,
   onVer,
   onBorrar,
+  din = false,
+  origen = null,
 }: {
+  din?: boolean;
+  origen?: DOMRect | null;
   noteId: string;
   abonarAlAbrir: boolean;
   onClose: () => void;
@@ -1165,6 +1405,7 @@ function PanelNota({
   const [verMas, setVerMas] = useState(false);
   const [posMas, setPosMas] = useState<{ top: number; right: number } | null>(null);
   const raizPanel = useRef<HTMLDivElement>(null);
+  const cajaFicha = useRef<HTMLElement>(null);
   const cajaMas = useRef<HTMLDivElement>(null);
   const cerrarMas = useCallback(() => setVerMas(false), []);
   useAlClicFuera(cajaMas, verMas, cerrarMas);
@@ -1184,8 +1425,43 @@ function PanelNota({
 
   const cerrar = useCallback(() => {
     setAbierto(false);
+    // Dinamic: la ventana vuelve a la ficha de donde salio
+    const el = cajaFicha.current;
+    if (din && origen && el) {
+      const f = el.getBoundingClientRect();
+      el.style.transition = "transform .38s cubic-bezier(.4,0,.2,1), opacity .3s .08s";
+      el.style.transformOrigin = "0 0";
+      el.style.transform = `translate(${origen.left - f.left}px, ${origen.top - f.top}px) scale(${origen.width / f.width}, ${
+        origen.height / f.height
+      })`;
+      el.style.opacity = "0";
+      setTimeout(onClose, 360);
+      return;
+    }
     setTimeout(onClose, 220);
-  }, [onClose]);
+  }, [onClose, din, origen]);
+
+  // Dinamic: cuando llegan los datos, la ventana crece desde la ficha que tocaste
+  const yaCrecio = useRef(false);
+  useLayoutEffect(() => {
+    const el = cajaFicha.current;
+    if (!din || !el || !p || yaCrecio.current) return;
+    yaCrecio.current = true;
+    if (!origen || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      el.style.opacity = "1";
+      return;
+    }
+    const f = el.getBoundingClientRect();
+    el.style.transition = "none";
+    el.style.transformOrigin = "0 0";
+    el.style.transform = `translate(${origen.left - f.left}px, ${origen.top - f.top}px) scale(${origen.width / f.width}, ${
+      origen.height / f.height
+    })`;
+    el.style.opacity = "1";
+    el.getBoundingClientRect();
+    el.style.transition = "transform .5s cubic-bezier(.2,.9,.2,1)";
+    el.style.transform = "none";
+  }, [din, origen, p]);
 
   useEffect(() => {
     function tecla(e: KeyboardEvent) {
@@ -1291,7 +1567,13 @@ function PanelNota({
   const CIRC = 2 * Math.PI * RADIO;
 
   return (
-    <div ref={raizPanel} className="fixed inset-0 z-50 print:hidden" role="dialog" aria-modal="true" aria-label="Nota">
+    <div
+      ref={raizPanel}
+      className={din ? "sn-f fixed inset-0 z-50 print:hidden flex items-center justify-center p-4" : "fixed inset-0 z-50 print:hidden"}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Nota"
+    >
       <div
         className={`absolute inset-0 bg-gray-950/30 backdrop-blur-[1.5px] transition-opacity duration-200 ${
           abierto ? "opacity-100" : "opacity-0"
@@ -1299,12 +1581,20 @@ function PanelNota({
         onMouseDown={cerrar}
       />
       <aside
-        className={`absolute top-2 right-2 bottom-2 w-[500px] max-w-[calc(100vw-16px)] flex flex-col rounded-2xl bg-white border border-gray-200 shadow-pop overflow-hidden transition-transform duration-300 ease-[cubic-bezier(.2,.85,.25,1)] ${
-          abierto ? "translate-x-0" : "translate-x-[calc(100%+24px)]"
-        }`}
+        ref={cajaFicha}
+        style={din ? { opacity: 0 } : undefined}
+        className={
+          din
+            ? `sn-ficha ${origen ? "" : "sn-ficha-sola"} relative w-[580px] max-w-full h-[min(760px,calc(100vh-32px))] flex flex-col bg-white shadow-pop overflow-hidden`
+            : `absolute top-2 right-2 bottom-2 w-[500px] max-w-[calc(100vw-16px)] flex flex-col rounded-2xl bg-white border border-gray-200 shadow-pop overflow-hidden transition-transform duration-300 ease-[cubic-bezier(.2,.85,.25,1)] ${
+                abierto ? "translate-x-0" : "translate-x-[calc(100%+24px)]"
+              }`
+        }
       >
-        {/* ---------- cabecera ---------- */}
-        <div className="px-5 pt-4 border-b border-gray-100">
+        {/* ---------- cabecera (en Dinamic, del color del estado de la nota) ---------- */}
+        <div
+          className={`${din && p ? `sn-f-cab sn-f-${vistaDe({ effective_status: p.effective_status, days_overdue: p.days_overdue } as NoteRow).toLowerCase()}` : ""} px-5 pt-4 border-b border-gray-100`}
+        >
           <div className="flex items-center gap-2">
             <span className="text-[12px] font-mono text-gray-400">
               Nota #{p ? String(p.sequence_number).padStart(4, "0") : "…"}
@@ -1365,7 +1655,30 @@ function PanelNota({
             </div>
           </div>
 
-          <div className="flex gap-1 -mb-px">
+          {din && p && (
+            <div className="sn-f-heroe">
+              <p className="sn-f-monto">${money(anulada ? p.total : p.pending > 0.005 ? p.pending : p.neto)}</p>
+              <p className="sn-f-lab">
+                {anulada
+                  ? "nota anulada"
+                  : p.pending > 0.005
+                  ? `falta por cobrar de $${money(p.neto)}`
+                  : `cobrada completa · ${pagosVivos.length} abono${pagosVivos.length === 1 ? "" : "s"}`}
+              </p>
+              <div className="sn-f-etapas" aria-hidden="true">
+                <span className="on" />
+                <span className={p.paid > 0.005 ? "on" : ""} />
+                <span className={p.pending <= 0.005 && !anulada ? "on" : ""} />
+              </div>
+              <div className="sn-f-etx">
+                <span>Hecha</span>
+                <span>Abonada</span>
+                <span>Cobrada</span>
+              </div>
+            </div>
+          )}
+
+          <div className="sn-f-tabs flex gap-1 -mb-px">
             {(
               [
                 ["resumen", "Resumen", null],
