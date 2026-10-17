@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Lateral } from "@/components/Ventana";
+import { TituloLetras, useEstilo } from "@/components/Estilo";
 import {
   EmptyState,
   NumInput,
@@ -227,6 +228,8 @@ type HojaProv = {
 
 export default function ComprasPage() {
   const router = useRouter();
+  // tema Dinamic: titulo grande, numeros con circulo y proveedores en tarjetas (el Clasico no cambia)
+  const din = useEstilo() === "dinamic";
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
   const [hojaId, setHojaId] = useState("");
   const [hojasProv, setHojasProv] = useState<HojaProv[]>([]);
@@ -704,8 +707,44 @@ export default function ComprasPage() {
   const bal = Number(currentSupplier?.balance ?? 0);
 
   return (
-    <main className="p-6 max-w-[1180px]">
+    <main className="sn-cp p-6 max-w-[1180px]">
       {/* ---------- encabezado ---------- */}
+      {din && (
+        <div className="sn-p-cabeza">
+          <TituloLetras lineas={["Compras"]} />
+          <p className="sn-p-sub">Las facturas de tus proveedores, lo que les pagaste y lo que les debes.</p>
+          <div className="sn-kpis">
+            <div className="sn-kpi">
+              <span className="sn-kpi-ic">
+                <Building2 size={17} />
+              </span>
+              <div>
+                <b>{activos.length}</b>
+                <small>proveedores activos</small>
+              </div>
+            </div>
+            <div className="sn-kpi">
+              <span className={`sn-kpi-ic ${totalDebt > 0 ? "sn-kpi-amarillo" : ""}`}>
+                <Wallet size={17} />
+              </span>
+              <div>
+                <b>{money(totalDebt)}</b>
+                <small>por pagar</small>
+              </div>
+            </div>
+            <div className="sn-kpi">
+              <span className={`sn-kpi-ic ${totalVencido > 0 ? "sn-kpi-rojo" : ""}`}>
+                <CalendarDays size={17} />
+              </span>
+              <div>
+                <b>{money(totalVencido)}</b>
+                <small>vencido</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {!din && (
       <div className="flex items-end justify-between mb-3">
         <div>
           <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">
@@ -728,9 +767,10 @@ export default function ComprasPage() {
           </p>
         </div>
       </div>
+      )}
 
       {/* ---------- barra de accesos directos ---------- */}
-      <div className="mb-3 flex items-center gap-0.5 rounded-xl bg-white border border-gray-200 shadow-card px-1.5 py-1 overflow-x-auto">
+      <div className="sn-barra mb-3 flex items-center gap-0.5 rounded-xl bg-white border border-gray-200 shadow-card px-1.5 py-1 overflow-x-auto">
         <ToolbarButton icon={FilePlus2} label="nueva factura" tone="brand" onClick={openForm} />
         <ToolbarButton
           icon={HandCoins}
@@ -772,7 +812,7 @@ export default function ComprasPage() {
 
       {/* ---------- formulario de factura ---------- */}
       {showForm && (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-card p-5 mb-4">
+        <div className="sn-cp-form bg-white border border-gray-200 rounded-xl shadow-card p-5 mb-4">
           <div className="flex items-center justify-between mb-4">
             <p className="text-[15px] font-semibold text-gray-900 flex items-center gap-2">
               <FilePlus2 size={17} className="text-brand-700" /> Registrar factura de compra
@@ -1118,9 +1158,9 @@ export default function ComprasPage() {
       )}
 
       {/* ---------- proveedores + linea de tiempo ---------- */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-card overflow-hidden flex min-h-[420px]">
+      <div className="sn-cp-caja bg-white border border-gray-200 rounded-xl shadow-card overflow-hidden flex min-h-[420px]">
         {/* lista de proveedores */}
-        <aside className="w-[250px] shrink-0 border-r border-gray-100 bg-gray-50/40 flex flex-col">
+        <aside className="sn-cp-provs w-[250px] shrink-0 border-r border-gray-100 bg-gray-50/40 flex flex-col">
           <div className="p-2.5 border-b border-gray-100">
             <div className="relative">
               <Search
@@ -1157,7 +1197,7 @@ export default function ComprasPage() {
                 <button
                   key={s.id}
                   onClick={() => setCurrent(s.id)}
-                  className={`block w-full text-left rounded-lg px-2.5 py-2 mb-0.5 ${
+                  className={`sn-cp-prov ${on ? "sn-cp-prov-on" : ""} block w-full text-left rounded-lg px-2.5 py-2 mb-0.5 ${
                     on ? "bg-brand-50 ring-1 ring-brand-200" : "hover:bg-white"
                   }`}
                 >
@@ -1213,11 +1253,11 @@ export default function ComprasPage() {
           ) : (
             <>
               {/* cabecera del proveedor */}
-              <div className="px-5 pt-4 pb-3 border-b border-gray-100">
+              <div className="sn-cp-cab px-5 pt-4 pb-3 border-b border-gray-100">
                 <div className="flex items-start gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h2 className="text-[17px] font-semibold text-gray-900 truncate">
+                      <h2 className="sn-cp-nombre text-[17px] font-semibold text-gray-900 truncate">
                         {currentSupplier.name}
                       </h2>
                       {!currentSupplier.active && <Pill tone="neutral">Archivado</Pill>}
@@ -1261,7 +1301,7 @@ export default function ComprasPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-2 mt-3">
+                <div className="sn-cp-stats grid grid-cols-4 gap-2 mt-3">
                   {[
                     { k: "Facturado", v: money(Number(currentSupplier.invoiced)), c: "text-gray-900" },
                     { k: "Pagado", v: money(Number(currentSupplier.paid)), c: "text-emerald-700" },
@@ -1285,7 +1325,7 @@ export default function ComprasPage() {
               </div>
 
               {/* filtro de movimientos */}
-              <div className="flex items-center gap-1 px-5 py-2 border-b border-gray-100 text-[12px]">
+              <div className="sn-cp-filtro flex items-center gap-1 px-5 py-2 border-b border-gray-100 text-[12px]">
                 {(
                   [
                     ["todo", "Todo"],
@@ -1328,7 +1368,7 @@ export default function ComprasPage() {
                       <div
                         key={r.kind + r.id}
                         onDoubleClick={() => !pago && setFacturaVer(r.id)}
-                        className="group flex items-center gap-3 px-5 h-12 border-b border-gray-100 last:border-0 hover:bg-gray-50/70"
+                        className="sn-cp-mov group flex items-center gap-3 px-5 h-12 border-b border-gray-100 last:border-0 hover:bg-gray-50/70"
                       >
                         <span className="text-[12px] text-gray-500 w-[74px] shrink-0">
                           {fechaCorta(r.entry_date)}
