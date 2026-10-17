@@ -1,0 +1,1262 @@
+/* ============================================================
+   TEMA DINAMIC
+   Se activa en Ajustes > Tema. Todas las reglas de este archivo
+   empiezan con "html.dinamic" o ".dinamic": si el tema no esta
+   activo, no hacen nada y el Clasico queda exactamente igual.
+   Solo cambia colores, formas y animaciones (nada de logica),
+   por eso el cambio es instantaneo.
+   Al imprimir no se aplica: las notas impresas salen como siempre.
+   Las reglas de colores de abajo se generan con dinamic.py.
+   ============================================================ */
+
+/* numeros del mismo ancho (de Inter) mezclados con la letra Urbanist,
+   para que las columnas de montos queden alineadas */
+@font-face {
+  font-family: "SN Cifras";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2) format("woff2-variations");
+  unicode-range: U+0030-0039;
+}
+
+/* al cambiar de tema todo cambia de golpe, sin transiciones a medias */
+.sn-cambiando *,
+.sn-cambiando *::before,
+.sn-cambiando *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* ---------------- paleta: claro ---------------- */
+html.dinamic {
+  --d-titulos: "Urbanist Variable", ui-sans-serif, system-ui, sans-serif;
+  --d-bg: #f2efe8;
+  --d-fondo1: rgba(233, 197, 71, 0.22);
+  --d-fondo2: rgba(47, 93, 79, 0.1);
+  --d-card: #fffdf9;
+  --d-isla: #151515;
+  --d-amarillo: #e9c547;
+  --d-on-amarillo: #1e1904;
+  --d-g50: #f7f4ee;
+  --d-g100: #efebe3;
+  --d-g200: #e6e1d6;
+  --d-g300: #d7d0c2;
+  --d-g400: #b8b0a0;
+  --d-g800: #2b2b29;
+  --d-g900: #151515;
+  --d-g950: #0e0e0d;
+  --d-t50: #f2efe8;
+  --d-t100: #e6e1d6;
+  --d-t200: #d4cec2;
+  --d-t300: #beb8ab;
+  --d-t400: #9a9589;
+  --d-t500: #767268;
+  --d-t600: #57544c;
+  --d-t700: #3b3933;
+  --d-t800: #26241f;
+  --d-t900: #151515;
+  --d-t950: #0e0e0d;
+  --d-b50: #f2eee6;
+  --d-b100: #ece7dd;
+  --d-b200: #e8e3d8;
+  --d-b300: #d6cebf;
+  --d-b400: #beb5a3;
+  --d-pri: #151515;
+  --d-pri2: #2e2e2b;
+  --d-on-pri: #ffffff;
+  --d-v50: #e8efea;
+  --d-v100: #d7e5dc;
+  --d-v200: #c3d8cb;
+  --d-vt: #2f5d4f;
+  --d-vb1: #c6dace;
+  --d-vb2: #a9c6b6;
+  --d-r50: #f9e5e0;
+  --d-r100: #f2d0c7;
+  --d-rs: #c2412d;
+  --d-rs2: #a93622;
+  --d-rt: #a8341f;
+  --d-rb: #ebc3b9;
+  --d-e50: #e3eee7;
+  --d-e100: #cfe3d7;
+  --d-es: #2f5d4f;
+  --d-es2: #264c40;
+  --d-et: #2b6a52;
+  --d-eb: #bcd8c8;
+  --d-a50: #faf0cf;
+  --d-a100: #f5e3a4;
+  --d-as: #e9c547;
+  --d-as2: #d8b232;
+  --d-at: #7a5800;
+  --d-ab: #e8d38c;
+  --d-grafica: #2f5d4f;
+  --d-focus: rgba(233, 197, 71, 0.45);
+  --d-sh-sm: 0 1px 2px rgba(60, 45, 20, 0.06);
+  --d-sh-card: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 12px 28px -20px rgba(60, 45, 20, 0.35);
+  --d-sh-pop: 0 30px 70px -24px rgba(40, 30, 10, 0.45);
+  --d-sh-btn: 0 10px 22px -14px rgba(20, 20, 20, 0.7);
+  --d-velo: rgba(30, 26, 18, 0.3);
+  color-scheme: light;
+}
+
+/* ---------------- paleta: oscuro (con la luna) ---------------- */
+html.dinamic.dark {
+  --d-bg: #121210;
+  --d-fondo1: rgba(233, 197, 71, 0.07);
+  --d-fondo2: rgba(110, 190, 150, 0.06);
+  --d-card: #1c1c19;
+  --d-isla: #0a0a09;
+  --d-g50: #191916;
+  --d-g100: #22221f;
+  --d-g200: #2b2b27;
+  --d-g300: #37372f;
+  --d-g400: #4e4c45;
+  --d-g800: #2c2d29;
+  --d-g900: #2c2d29;
+  --d-g950: #0a0a09;
+  --d-t50: #2a2925;
+  --d-t100: #2e2c28;
+  --d-t200: #403d37;
+  --d-t300: #57534b;
+  --d-t400: #6f6b61;
+  --d-t500: #8c877c;
+  --d-t600: #a7a296;
+  --d-t700: #c2bdb1;
+  --d-t800: #dad6cc;
+  --d-t900: #eeebe3;
+  --d-t950: #f6f4ee;
+  --d-b50: #1e1e1b;
+  --d-b100: #252521;
+  --d-b200: #2e2d29;
+  --d-b300: #3a3933;
+  --d-b400: #4e4c45;
+  --d-pri: #e9c547;
+  --d-pri2: #f0d266;
+  --d-on-pri: #1e1904;
+  --d-v50: rgba(140, 195, 174, 0.13);
+  --d-v100: rgba(140, 195, 174, 0.2);
+  --d-v200: rgba(140, 195, 174, 0.28);
+  --d-vt: #9ccdb9;
+  --d-vb1: rgba(140, 195, 174, 0.25);
+  --d-vb2: rgba(140, 195, 174, 0.4);
+  --d-r50: rgba(214, 90, 70, 0.16);
+  --d-r100: rgba(214, 90, 70, 0.26);
+  --d-rs: #c9503b;
+  --d-rs2: #b04530;
+  --d-rt: #f2a493;
+  --d-rb: rgba(214, 90, 70, 0.4);
+  --d-e50: rgba(110, 190, 150, 0.14);
+  --d-e100: rgba(110, 190, 150, 0.22);
+  --d-es: #3f7f68;
+  --d-es2: #356c58;
+  --d-et: #8fd1b5;
+  --d-eb: rgba(110, 190, 150, 0.35);
+  --d-a50: rgba(233, 197, 71, 0.14);
+  --d-a100: rgba(233, 197, 71, 0.24);
+  --d-at: #eed27a;
+  --d-ab: rgba(233, 197, 71, 0.38);
+  --d-grafica: #9ccdb9;
+  --d-focus: rgba(233, 197, 71, 0.3);
+  --d-sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --d-sh-card: 0 0 0 1px rgba(255, 255, 255, 0.03), 0 12px 28px -18px rgba(0, 0, 0, 0.7);
+  --d-sh-pop: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 30px 70px -20px rgba(0, 0, 0, 0.8);
+  --d-sh-btn: 0 10px 22px -14px rgba(0, 0, 0, 0.9);
+  --d-velo: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+@media screen {
+  /* ---------------- fondo y letra (al imprimir se queda la letra de siempre) ---------------- */
+  html.dinamic {
+    --font-inter: "SN Cifras", "Urbanist Variable";
+  }
+  html.dinamic body {
+    background-color: var(--d-bg);
+    color: var(--d-t900);
+    font-weight: 500;
+    letter-spacing: 0.005em;
+  }
+  html.dinamic body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(900px 520px at 100% -10%, var(--d-fondo1), transparent 70%),
+      radial-gradient(800px 600px at -10% 110%, var(--d-fondo2), transparent 70%);
+  }
+  .dinamic .font-medium {
+    font-weight: 600;
+  }
+  .dinamic .font-semibold {
+    font-weight: 700;
+  }
+  .dinamic ::selection {
+    background: var(--d-a100);
+  }
+  .dinamic * {
+    scrollbar-color: var(--d-g300) transparent;
+  }
+  .dinamic ::-webkit-scrollbar-thumb {
+    background: var(--d-g300);
+    background-clip: content-box;
+  }
+
+  /* titulos grandes, con la letra del tema */
+  .dinamic .sn-contenido h1 {
+    font-family: var(--d-titulos);
+    font-size: 34px;
+    line-height: 1.08;
+    font-weight: 750;
+    letter-spacing: -0.035em;
+    animation: sn-titulo 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .dinamic h2,
+  .dinamic .sn-tarjeta > p:nth-child(2),
+  .dinamic .text-\[22px\],
+  .dinamic .text-\[24px\],
+  .dinamic .text-\[26px\],
+  .dinamic .text-\[28px\],
+  .dinamic .text-2xl,
+  .dinamic .text-3xl {
+    font-family: var(--d-titulos);
+    letter-spacing: -0.025em;
+  }
+  .dinamic .sn-tarjeta > p:nth-child(2) {
+    font-size: 28px;
+    font-weight: 750;
+  }
+
+  /* ---------------- campos ---------------- */
+  /* sin peso propio: si el campo trae su clase de color, esa manda */
+  :where(.dinamic) :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea),
+  .dinamic.dark :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea) {
+    background-color: var(--d-card);
+    color: var(--d-t900);
+    border-color: var(--d-b300);
+  }
+  .dinamic input::placeholder,
+  .dinamic textarea::placeholder {
+    color: var(--d-t400);
+  }
+  .dinamic.dark input:disabled,
+  :where(.dinamic) input:disabled {
+    background-color: var(--d-g50);
+    color: var(--d-t400);
+  }
+  .dinamic input:focus-visible,
+  .dinamic select:focus-visible,
+  .dinamic textarea:focus-visible {
+    border-color: var(--d-t900) !important;
+    box-shadow: 0 0 0 3px var(--d-focus);
+  }
+  .dinamic :focus-visible {
+    outline-color: var(--d-t900);
+  }
+  .dinamic input[type="checkbox"],
+  .dinamic input[type="radio"] {
+    accent-color: var(--d-pri);
+  }
+  .dinamic kbd {
+    background-color: var(--d-g100);
+    border-color: var(--d-b200);
+    color: var(--d-t500);
+    border-radius: 7px;
+  }
+  .dinamic .skeleton {
+    background-color: var(--d-g200);
+  }
+
+  /* ---------------- botones: se hunden un poco al tocarlos ---------------- */
+  .dinamic button {
+    transition: background-color 0.18s, color 0.18s, border-color 0.18s, box-shadow 0.2s, transform 0.16s cubic-bezier(0.3, 1.4, 0.5, 1),
+      opacity 0.18s;
+  }
+  .dinamic button:not(:disabled):active {
+    transform: scale(0.97);
+  }
+  /* botones principales (antes azul con degradado): negro solido; en oscuro, amarillo */
+  .dinamic .bg-gradient-to-b.from-brand-600,
+  .dinamic .bg-gradient-to-b.from-brand-500 {
+    background-image: none;
+    background-color: var(--d-pri);
+    color: var(--d-on-pri);
+    border-color: transparent;
+  }
+  .dinamic .bg-gradient-to-b.from-brand-600:hover {
+    background-color: var(--d-pri2);
+    filter: none;
+  }
+  .dinamic .bg-gradient-to-b.from-emerald-500 {
+    background-image: none;
+    background-color: var(--d-es);
+    border-color: transparent;
+  }
+  .dinamic .bg-gradient-to-r.from-brand-600 {
+    background-image: linear-gradient(to right, var(--d-grafica), color-mix(in srgb, var(--d-grafica) 40%, transparent));
+  }
+  .dinamic .bg-gradient-to-br.from-brand-500 {
+    background-image: none;
+    background-color: var(--d-amarillo);
+    color: var(--d-on-amarillo);
+    box-shadow: none;
+  }
+
+  /* ---------------- islas negras: el menu y el resumen de la nota ----------------
+     dentro de ellas los mismos colores se vuelven claros sobre negro */
+  html.dinamic .sn-menu,
+  html.dinamic .sn-resumen {
+    --d-card: rgba(255, 255, 255, 0.07);
+    --d-g50: rgba(255, 255, 255, 0.05);
+    --d-g100: rgba(255, 255, 255, 0.09);
+    --d-g200: rgba(255, 255, 255, 0.13);
+    --d-g300: rgba(255, 255, 255, 0.2);
+    --d-t300: rgba(255, 255, 255, 0.3);
+    --d-t400: rgba(255, 255, 255, 0.45);
+    --d-t500: rgba(255, 255, 255, 0.55);
+    --d-t600: rgba(255, 255, 255, 0.72);
+    --d-t700: rgba(255, 255, 255, 0.82);
+    --d-t800: rgba(255, 255, 255, 0.9);
+    --d-t900: #ffffff;
+    --d-t950: #ffffff;
+    --d-b50: rgba(255, 255, 255, 0.05);
+    --d-b100: rgba(255, 255, 255, 0.07);
+    --d-b200: rgba(255, 255, 255, 0.1);
+    --d-b300: rgba(255, 255, 255, 0.16);
+    --d-b400: rgba(255, 255, 255, 0.24);
+    --d-pri: var(--d-amarillo);
+    --d-pri2: #f0d266;
+    --d-on-pri: var(--d-on-amarillo);
+    --d-v50: rgba(233, 197, 71, 0.14);
+    --d-vt: var(--d-amarillo);
+    --d-r50: rgba(214, 90, 70, 0.3);
+    --d-rt: #ffb4a6;
+    --d-a50: rgba(233, 197, 71, 0.2);
+    --d-a100: rgba(233, 197, 71, 0.3);
+    --d-at: #f2d675;
+    --d-focus: rgba(233, 197, 71, 0.35);
+    --d-sh-sm: none;
+    --d-sh-card: none;
+    color: #fff;
+    background-color: var(--d-isla);
+  }
+  html.dinamic .sn-menu {
+    margin: 10px 0 10px 10px;
+    top: 10px;
+    height: calc(100vh - 20px);
+    border: 0;
+    border-radius: 28px;
+    box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.55);
+  }
+  html.dinamic .sn-resumen {
+    border-color: transparent;
+    border-radius: 28px;
+    padding: 20px;
+    box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.6);
+  }
+  html.dinamic .sn-resumen [aria-checked="true"] {
+    background-color: #fff;
+    color: #151515;
+    box-shadow: none;
+  }
+  html.dinamic .sn-resumen [aria-checked="true"] span {
+    color: inherit;
+  }
+  html.dinamic .sn-resumen [aria-checked="true"] span + span {
+    opacity: 0.6;
+  }
+  html.dinamic .sn-resumen .text-\[30px\] {
+    font-size: 40px;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+  }
+  html.dinamic .sn-resumen .border-t {
+    border-top-color: rgba(255, 255, 255, 0.1);
+  }
+  html.dinamic .sn-resumen .sn-guardar {
+    height: 52px;
+    border-radius: 999px;
+    border-color: transparent;
+    background-image: none;
+    background-color: var(--d-amarillo);
+    color: var(--d-on-amarillo);
+    font-size: 15px;
+    font-weight: 700;
+    box-shadow: 0 14px 28px -16px rgba(233, 197, 71, 0.8);
+  }
+  html.dinamic .sn-resumen .sn-guardar:hover {
+    background-color: #f0d266;
+  }
+  html.dinamic .sn-resumen .sn-guardar kbd {
+    background-color: rgba(0, 0, 0, 0.08);
+    border-color: rgba(0, 0, 0, 0.12);
+    color: rgba(30, 25, 4, 0.7);
+  }
+  .dinamic.dark .sn-resumen,
+  .dinamic.dark .sn-menu {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 30px 60px -30px rgba(0, 0, 0, 0.8);
+  }
+  .dinamic .sn-menu .border-t {
+    border-top-color: rgba(255, 255, 255, 0.08);
+  }
+  html.dinamic .sn-logo {
+    border-radius: 999px;
+    font-family: var(--d-titulos);
+    font-weight: 800;
+  }
+  html.dinamic .sn-enlace {
+    border-radius: 999px;
+    height: 36px;
+  }
+  html.dinamic .sn-menu .sn-activo {
+    background-color: var(--d-amarillo);
+    color: var(--d-on-amarillo);
+    box-shadow: 0 8px 18px -10px rgba(233, 197, 71, 0.7);
+  }
+  html.dinamic .sn-menu .sn-activo svg {
+    color: inherit;
+  }
+  html.dinamic .sn-tasas {
+    border-color: transparent;
+    border-radius: 20px;
+  }
+
+  /* ---------------- barra de arriba ---------------- */
+  .dinamic .sn-cabecera {
+    background-color: color-mix(in srgb, var(--d-bg) 72%, transparent);
+    border-bottom-color: transparent;
+    height: 64px;
+  }
+  .dinamic .sn-cabecera > button,
+  .dinamic .sn-cabecera > div > button {
+    width: 38px;
+    height: 38px;
+    border-radius: 999px;
+    background-color: var(--d-card);
+    box-shadow: var(--d-sh-card);
+  }
+  .dinamic .ring-\[\#f5f6f8\] {
+    --tw-ring-color: var(--d-card);
+  }
+  html.dinamic .sn-cabecera a.sn-nueva {
+    height: 40px;
+    padding-left: 16px;
+    padding-right: 10px;
+    border-radius: 999px;
+    border-color: transparent;
+    background-image: none;
+    background-color: var(--d-amarillo);
+    color: var(--d-on-amarillo);
+    font-weight: 700;
+    box-shadow: 0 12px 24px -14px rgba(160, 120, 0, 0.8);
+    transition: transform 0.16s, box-shadow 0.2s, filter 0.2s;
+  }
+  html.dinamic .sn-cabecera a.sn-nueva:hover {
+    filter: none;
+    transform: translateY(-1px);
+    box-shadow: 0 16px 28px -14px rgba(160, 120, 0, 0.9);
+  }
+  html.dinamic .sn-cabecera a.sn-nueva kbd {
+    background-color: rgba(0, 0, 0, 0.08);
+    border-color: rgba(0, 0, 0, 0.12);
+    color: rgba(30, 25, 4, 0.7);
+  }
+  .dinamic .bg-\[\#fbfbfc\] {
+    background-color: var(--d-isla);
+  }
+  .dinamic .bg-\[\#f5f6f8\] {
+    background-color: var(--d-bg);
+  }
+  .dinamic .bg-\[\#f5f6f8\]\/85 {
+    background-color: color-mix(in srgb, var(--d-bg) 85%, transparent);
+  }
+
+  /* ---------------- cada pantalla entra suave ---------------- */
+  .dinamic .sn-contenido > * {
+    animation: sn-entrar 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  /* lo que se pega arriba al bajar queda justo debajo del menu de pastillas (58px) */
+  .dinamic .top-\[52px\] {
+    top: 58px;
+  }
+  @media (min-width: 1024px) {
+    .dinamic .lg\:top-\[68px\] {
+      top: 74px;
+    }
+  }
+
+  /* ================= MARCO DINAMIC (components/Shell.tsx > MarcoDinamic) ================= */
+  .dinamic .sn-d-marco {
+    padding-left: 80px;
+    max-width: 1440px;
+  }
+  /* arriba: marca y herramientas */
+  .dinamic .sn-d-arriba {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 24px 4px;
+  }
+  .dinamic .sn-d-marca {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .dinamic .sn-d-logo {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    background: var(--d-t900);
+    color: var(--d-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--d-titulos);
+    font-weight: 800;
+    font-size: 18px;
+    flex-shrink: 0;
+    transition: transform 0.25s cubic-bezier(0.3, 1.4, 0.5, 1);
+  }
+  .dinamic .sn-d-marca:hover .sn-d-logo {
+    transform: rotate(-8deg) scale(1.05);
+  }
+  .dinamic .sn-d-nombre {
+    font-family: var(--d-titulos);
+    font-weight: 750;
+    font-size: 19px;
+    letter-spacing: -0.02em;
+    color: var(--d-t900);
+    white-space: nowrap;
+  }
+  .dinamic .sn-d-insignia {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 700;
+    background: var(--d-amarillo);
+    color: var(--d-on-amarillo);
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .dinamic .sn-d-herr {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .dinamic .sn-d-circ,
+  .dinamic .sn-d-yo {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform 0.2s cubic-bezier(0.3, 1.4, 0.5, 1), background-color 0.2s, color 0.2s;
+  }
+  .dinamic .sn-d-circ {
+    background: var(--d-card);
+    color: var(--d-t700);
+    box-shadow: var(--d-sh-card);
+  }
+  .dinamic .sn-d-circ:hover,
+  .dinamic .sn-d-yo:hover {
+    transform: translateY(-2px);
+    color: var(--d-t900);
+  }
+  .dinamic .sn-d-circ-on {
+    background: var(--d-t900);
+    color: var(--d-bg) !important;
+  }
+  .dinamic .sn-d-yo {
+    background: var(--d-es);
+    color: #fff !important;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .dinamic .sn-d-globo {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--d-rs);
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 2px var(--d-bg);
+  }
+  /* tasas del dia, en una pastilla */
+  .dinamic .sn-d-tasas {
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: var(--d-card);
+    box-shadow: var(--d-sh-card);
+    font-size: 13px;
+    color: var(--d-t500);
+    white-space: nowrap;
+  }
+  .dinamic .sn-d-tasas b {
+    color: var(--d-t900);
+    font-weight: 700;
+  }
+  .dinamic .sn-d-tasas:hover {
+    color: var(--d-t700);
+  }
+  .dinamic .sn-d-tasas-viejas {
+    background: var(--d-a50);
+    color: var(--d-at);
+  }
+  .dinamic .sn-d-sep {
+    width: 1px;
+    height: 14px;
+    background: var(--d-b300);
+  }
+  .dinamic .sn-d-punto-verde {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--d-es);
+  }
+  .dinamic .sn-d-aviso-tasas {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--d-amarillo);
+    color: var(--d-on-amarillo);
+  }
+  .dinamic .sn-d-pop {
+    animation: sn-desplegar 0.22s cubic-bezier(0.2, 1, 0.4, 1) both;
+  }
+  html.dinamic .sn-d-pop .sn-tasas {
+    margin: 0;
+    padding: 14px;
+    border-radius: 22px;
+    box-shadow: var(--d-sh-pop);
+  }
+
+  /* menu en pastillas, pegado arriba al bajar */
+  .dinamic .sn-d-menu {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 24px;
+    background: color-mix(in srgb, var(--d-bg) 82%, transparent);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    backdrop-filter: blur(14px) saturate(1.4);
+  }
+  .dinamic .sn-d-pastillas {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .dinamic .sn-d-pastillas::-webkit-scrollbar {
+    display: none;
+  }
+  .dinamic .sn-d-pildora {
+    position: relative;
+    z-index: 1;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 13px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--d-t500);
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: color 0.25s;
+  }
+  .dinamic .sn-d-pildora:hover {
+    color: var(--d-t900);
+  }
+  .dinamic .sn-d-pildora-on,
+  .dinamic .sn-d-pildora-on:hover {
+    color: var(--d-bg);
+  }
+  .dinamic .sn-d-indicador {
+    position: absolute;
+    z-index: 0;
+    left: 0;
+    top: 0;
+    height: 38px;
+    border-radius: 999px;
+    background: var(--d-t900);
+    box-shadow: var(--d-sh-btn);
+    transition: transform 0.45s cubic-bezier(0.3, 1.3, 0.5, 1), width 0.45s cubic-bezier(0.3, 1.3, 0.5, 1);
+  }
+  .dinamic .sn-d-cuenta {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .dinamic .sn-d-cuenta-roja {
+    background: var(--d-rs);
+    color: #fff;
+  }
+  .dinamic .sn-d-cuenta-ambar {
+    background: var(--d-amarillo);
+    color: var(--d-on-amarillo);
+  }
+  .dinamic .sn-d-nueva {
+    height: 40px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 10px 0 16px;
+    border-radius: 999px;
+    background: var(--d-amarillo);
+    color: var(--d-on-amarillo);
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 12px 24px -14px rgba(160, 120, 0, 0.8);
+    transition: transform 0.16s, box-shadow 0.2s, background-color 0.2s;
+  }
+  .dinamic .sn-d-nueva:hover {
+    background: #f0d266;
+    transform: translateY(-1px);
+    box-shadow: 0 16px 28px -14px rgba(160, 120, 0, 0.9);
+  }
+  .dinamic .sn-d-nueva kbd {
+    font-size: 10.5px;
+    padding: 1px 6px;
+    background: rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    color: rgba(30, 25, 4, 0.7);
+    font-family: inherit;
+  }
+
+  /* barra negra flotante de la izquierda */
+  .dinamic .sn-d-dock {
+    position: fixed;
+    left: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 9px;
+    border-radius: 28px;
+    background: #151515;
+    box-shadow: 0 20px 40px -18px rgba(0, 0, 0, 0.55);
+    animation: sn-dock 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+  }
+  .dinamic.dark .sn-d-dock {
+    background: #0a0a09;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 20px 40px -18px rgba(0, 0, 0, 0.8);
+  }
+  .dinamic .sn-d-dock hr {
+    border: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    margin: 4px 6px;
+  }
+  .dinamic .sn-d-atajo {
+    position: relative;
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #c9c7c0;
+  }
+  .dinamic .sn-d-atajo:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    transform: scale(1.08);
+  }
+  .dinamic .sn-d-atajo.sn-d-on {
+    color: var(--d-amarillo);
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .dinamic .sn-d-atajo-am {
+    background: var(--d-amarillo);
+    color: var(--d-on-amarillo);
+  }
+  .dinamic .sn-d-atajo-am:hover {
+    background: #f0d266;
+    color: var(--d-on-amarillo);
+  }
+  /* el nombre de cada atajo aparece al pasar el raton */
+  .dinamic .sn-d-atajo::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 54px;
+    top: 50%;
+    transform: translate(-6px, -50%);
+    padding: 6px 11px;
+    border-radius: 999px;
+    background: #151515;
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s, transform 0.2s;
+    box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.6);
+  }
+  .dinamic .sn-d-atajo:hover::after {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+  /* la luna de arriba solo se ve cuando no cabe la barra negra */
+  .dinamic .sn-d-solo-angosto {
+    display: none;
+  }
+
+  /* si no cabe todo arriba: primero se va la insignia, luego Binance y Pesos (siguen al tocar la pastilla) */
+  @media (max-width: 1180px) {
+    .dinamic .sn-d-insignia {
+      display: none;
+    }
+  }
+  @media (max-width: 1040px) {
+    .dinamic .sn-d-t2 {
+      display: none;
+    }
+  }
+
+  /* pantallas angostas: sin barra negra, el menu ocupa todo el ancho */
+  @media (max-width: 900px) {
+    .dinamic .sn-d-dock {
+      display: none;
+    }
+    .dinamic .sn-d-marco {
+      padding-left: 0;
+    }
+    .dinamic .sn-d-solo-angosto {
+      display: inline-flex;
+    }
+    .dinamic .sn-d-insignia,
+    .dinamic .sn-d-tasas > span:not(.sn-d-punto-verde):not(.sn-d-aviso-tasas),
+    .dinamic .sn-d-nueva kbd {
+      display: none;
+    }
+    .dinamic .sn-d-arriba,
+    .dinamic .sn-d-menu {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+  }
+  @media (max-width: 560px) {
+    .dinamic .sn-d-nombre,
+    .dinamic .sn-d-tasas {
+      display: none;
+    }
+  }
+
+  /* ---------------- tarjetas ---------------- */
+  .dinamic :where(.rounded-xl.bg-white, .rounded-2xl.bg-white):not(.shadow-pop) {
+    box-shadow: var(--d-sh-card);
+  }
+  html.dinamic .sn-tarjeta {
+    border-color: transparent;
+    border-radius: 24px;
+  }
+  html.dinamic .sn-barra {
+    border-color: transparent;
+    border-radius: 999px;
+    padding: 5px;
+    box-shadow: var(--d-sh-card);
+  }
+  html.dinamic .sn-barra button {
+    border-radius: 999px;
+  }
+  .dinamic .sn-barra button.bg-brand-50,
+  .dinamic .sn-segmento button[aria-checked="true"] {
+    background-color: var(--d-t900);
+    color: var(--d-bg);
+    box-shadow: none;
+  }
+  html.dinamic .sn-segmento {
+    border-radius: 999px;
+    padding: 3px;
+  }
+  html.dinamic .sn-segmento button {
+    border-radius: 999px;
+  }
+  .dinamic .rounded-full.ring-1.ring-inset {
+    font-weight: 600;
+  }
+
+  /* tarjetas para elegir el tema, en Ajustes */
+  html.dinamic .sn-opcion-tema {
+    border-radius: 22px;
+    padding: 10px;
+  }
+  html.dinamic .sn-opcion-tema > div:first-child {
+    border-radius: 16px;
+  }
+  html.dinamic .sn-opcion-tema[aria-checked="true"] {
+    border-color: var(--d-t900);
+    box-shadow: var(--d-sh-card);
+  }
+
+  /* ---------------- ventanas ---------------- */
+  html.dinamic .sn-velo {
+    background-color: var(--d-velo);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    animation: sn-aparecer 0.22s ease-out both;
+  }
+  html.dinamic .sn-velo.opacity-0 {
+    animation: none;
+  }
+  html.dinamic .sn-ventana {
+    border-color: transparent;
+    border-radius: 28px;
+    box-shadow: var(--d-sh-pop);
+    animation: sn-ventana 0.34s cubic-bezier(0.2, 1.15, 0.4, 1) both;
+  }
+  html.dinamic .sn-lateral {
+    border-color: transparent;
+    border-radius: 28px;
+    top: 10px;
+    right: 10px;
+    bottom: 10px;
+  }
+  html.dinamic .sn-flotante {
+    border-color: transparent;
+    border-radius: 22px;
+    animation: sn-desplegar 0.22s cubic-bezier(0.2, 1, 0.4, 1) both;
+  }
+
+  /* ---------------- avisos (abajo a la derecha) ---------------- */
+  .dinamic [data-sonner-toaster] {
+    --border-radius: 22px;
+    font-family: "Urbanist Variable", system-ui, sans-serif !important;
+  }
+  .dinamic [data-sonner-toast][data-styled="true"] {
+    background: #151515 !important;
+    color: #fff !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 22px !important;
+    box-shadow: 0 24px 48px -20px rgba(0, 0, 0, 0.6) !important;
+    font-weight: 600;
+  }
+  .dinamic [data-sonner-toast] [data-description] {
+    color: rgba(255, 255, 255, 0.7) !important;
+    font-weight: 500;
+  }
+  .dinamic [data-sonner-toast][data-type="success"] [data-icon] {
+    color: #8fd1b5;
+  }
+  .dinamic [data-sonner-toast][data-type="error"] [data-icon] {
+    color: #ff9a85;
+  }
+  .dinamic [data-sonner-toast][data-type="warning"] [data-icon] {
+    color: var(--d-amarillo);
+  }
+  .dinamic [data-sonner-toast] [data-close-button] {
+    background: #2b2b29 !important;
+    color: #fff !important;
+    border-color: #3a3a37 !important;
+  }
+  .dinamic [data-sonner-toast] [data-button] {
+    background: var(--d-amarillo) !important;
+    color: var(--d-on-amarillo) !important;
+    border-radius: 999px !important;
+    font-weight: 700;
+  }
+
+  /* ---------------- graficas del panel ---------------- */
+  .dinamic svg [stroke="#4568a8"] {
+    stroke: var(--d-grafica);
+  }
+  .dinamic svg stop[stop-color="#4568a8"] {
+    stop-color: var(--d-grafica);
+  }
+  .dinamic svg [stroke="#eef0f4"] {
+    stroke: var(--d-b200);
+  }
+  .dinamic svg [fill="#9aa1b1"] {
+    fill: var(--d-t400);
+  }
+  .dinamic svg circle[fill="white"] {
+    fill: var(--d-card);
+  }
+  .dinamic [style*="background: rgb(69, 104, 168)"] {
+    background: var(--d-grafica) !important;
+  }
+
+  /* ---------------- colores (generados) ---------------- */
+.dinamic .rounded-md{border-radius:10px}
+.dinamic .rounded-lg{border-radius:14px}
+.dinamic .rounded-xl{border-radius:20px}
+.dinamic .rounded-2xl{border-radius:26px}
+.dinamic .rounded-\[9px\]{border-radius:999px}
+.dinamic .rounded-\[10px\]{border-radius:14px}
+.dinamic .rounded-\[7px\]{border-radius:10px}
+.dinamic .rounded-\[5px\]{border-radius:8px}
+.dinamic .rounded-t-xl{border-top-left-radius:20px;border-top-right-radius:20px}
+.dinamic .rounded-b-xl{border-bottom-left-radius:20px;border-bottom-right-radius:20px}
+.dinamic .shadow-card{box-shadow:var(--d-sh-card)}
+.dinamic .shadow-sm{box-shadow:var(--d-sh-sm)}
+.dinamic .shadow-pop{box-shadow:var(--d-sh-pop)}
+.dinamic .shadow-xl{box-shadow:var(--d-sh-pop)}
+.dinamic .hover\:shadow-pop:hover{box-shadow:var(--d-sh-pop)}
+.dinamic .hover\:shadow-card:hover{box-shadow:var(--d-sh-card)}
+.dinamic .hover\:shadow-\[0_1px_2px_rgba:hover{box-shadow:var(--d-sh-sm)}
+.dinamic .shadow-\[0_1px_2px_rgba{box-shadow:var(--d-sh-sm)}
+.dinamic .shadow-\[0_20px_50px_-12px_rgba{box-shadow:var(--d-sh-pop)}
+.dinamic .shadow-\[inset_0_1px_0_rgba{box-shadow:var(--d-sh-btn)}
+.dinamic .accent-amber-700{accent-color:var(--d-as)}
+.dinamic .accent-brand-700{accent-color:var(--d-pri)}
+.dinamic .accent-red-600{accent-color:var(--d-rs)}
+.dinamic .bg-amber-100{background-color:var(--d-a100)}
+.dinamic .bg-amber-400{background-color:var(--d-as)}
+.dinamic .bg-amber-50{background-color:var(--d-a50)}
+.dinamic .bg-amber-50\/40{background-color:color-mix(in srgb, var(--d-a50) 40%, transparent)}
+.dinamic .bg-amber-50\/60{background-color:color-mix(in srgb, var(--d-a50) 60%, transparent)}
+.dinamic .bg-amber-500{background-color:var(--d-as)}
+.dinamic .bg-brand-200{background-color:var(--d-v200)}
+.dinamic .bg-brand-300{background-color:var(--d-v200)}
+.dinamic .bg-brand-50{background-color:var(--d-v50)}
+.dinamic .bg-brand-50\/40{background-color:color-mix(in srgb, var(--d-v50) 40%, transparent)}
+.dinamic .bg-brand-50\/50{background-color:color-mix(in srgb, var(--d-v50) 50%, transparent)}
+.dinamic .bg-brand-50\/60{background-color:color-mix(in srgb, var(--d-v50) 60%, transparent)}
+.dinamic .bg-brand-50\/70{background-color:color-mix(in srgb, var(--d-v50) 70%, transparent)}
+.dinamic .bg-brand-700{background-color:var(--d-pri);color:var(--d-on-pri)}
+.dinamic .bg-emerald-300{background-color:var(--d-es)}
+.dinamic .bg-emerald-50{background-color:var(--d-e50)}
+.dinamic .bg-emerald-50\/40{background-color:color-mix(in srgb, var(--d-e50) 40%, transparent)}
+.dinamic .bg-emerald-50\/50{background-color:color-mix(in srgb, var(--d-e50) 50%, transparent)}
+.dinamic .bg-emerald-500{background-color:var(--d-es)}
+.dinamic .bg-emerald-600{background-color:var(--d-es)}
+.dinamic .bg-gray-100{background-color:var(--d-g100)}
+.dinamic .bg-gray-200{background-color:var(--d-g200)}
+.dinamic .bg-gray-200\/60{background-color:color-mix(in srgb, var(--d-g200) 60%, transparent)}
+.dinamic .bg-gray-300{background-color:var(--d-g300)}
+.dinamic .bg-gray-50{background-color:var(--d-g50)}
+.dinamic .bg-gray-50\/40{background-color:color-mix(in srgb, var(--d-g50) 40%, transparent)}
+.dinamic .bg-gray-50\/50{background-color:color-mix(in srgb, var(--d-g50) 50%, transparent)}
+.dinamic .bg-gray-50\/60{background-color:color-mix(in srgb, var(--d-g50) 60%, transparent)}
+.dinamic .bg-gray-50\/70{background-color:color-mix(in srgb, var(--d-g50) 70%, transparent)}
+.dinamic .bg-gray-50\/80{background-color:color-mix(in srgb, var(--d-g50) 80%, transparent)}
+.dinamic .bg-gray-800{background-color:var(--d-g800)}
+.dinamic .bg-gray-900{background-color:var(--d-g900)}
+.dinamic .bg-gray-950\/30{background-color:color-mix(in srgb, var(--d-g950) 30%, transparent)}
+.dinamic .bg-gray-950\/40{background-color:color-mix(in srgb, var(--d-g950) 40%, transparent)}
+.dinamic .bg-green-100{background-color:var(--d-e100)}
+.dinamic .bg-red-100{background-color:var(--d-r100)}
+.dinamic .bg-red-50{background-color:var(--d-r50)}
+.dinamic .bg-red-50\/60{background-color:color-mix(in srgb, var(--d-r50) 60%, transparent)}
+.dinamic .bg-red-500{background-color:var(--d-rs)}
+.dinamic .bg-red-600{background-color:var(--d-rs)}
+.dinamic .bg-white{background-color:var(--d-card)}
+.dinamic .bg-white\/95{background-color:color-mix(in srgb, var(--d-card) 95%, transparent)}
+.dinamic .border-amber-200{border-color:var(--d-ab)}
+.dinamic .border-amber-300{border-color:var(--d-ab)}
+.dinamic .border-brand-100{border-color:var(--d-vb1)}
+.dinamic .border-brand-100\/60{border-color:color-mix(in srgb, var(--d-vb1) 60%, transparent)}
+.dinamic .border-brand-200{border-color:var(--d-vb1)}
+.dinamic .border-brand-300{border-color:var(--d-vb2)}
+.dinamic .border-brand-400{border-color:var(--d-vb2)}
+.dinamic .border-brand-700{border-color:var(--d-pri)}
+.dinamic .border-brand-900{border-color:var(--d-pri)}
+.dinamic .border-emerald-200{border-color:var(--d-eb)}
+.dinamic .border-emerald-300{border-color:var(--d-eb)}
+.dinamic .border-emerald-700{border-color:var(--d-es)}
+.dinamic .border-gray-100{border-color:var(--d-b100)}
+.dinamic .border-gray-200{border-color:var(--d-b200)}
+.dinamic .border-gray-200\/80{border-color:color-mix(in srgb, var(--d-b200) 80%, transparent)}
+.dinamic .border-gray-300{border-color:var(--d-b300)}
+.dinamic .border-gray-50{border-color:var(--d-b50)}
+.dinamic .border-gray-700{border-color:var(--d-t700)}
+.dinamic .border-gray-900{border-color:var(--d-t900)}
+.dinamic .border-red-100{border-color:var(--d-rb)}
+.dinamic .border-red-200{border-color:var(--d-rb)}
+.dinamic .border-red-300{border-color:var(--d-rb)}
+.dinamic .disabled\:bg-gray-50:disabled{background-color:var(--d-g50)}
+.dinamic .disabled\:text-gray-400:disabled{color:var(--d-t400)}
+.dinamic .focus\:border-brand-400:focus{border-color:var(--d-vb2)}
+.dinamic .focus\:border-brand-500:focus{border-color:var(--d-pri)}
+.dinamic .group:hover .group-hover\:bg-brand-50{background-color:var(--d-v50)}
+.dinamic .group:hover .group-hover\:bg-brand-600{background-color:var(--d-pri);color:var(--d-on-pri)}
+.dinamic .group:hover .group-hover\:text-brand-700{color:var(--d-vt)}
+.dinamic .group:hover .group-hover\:text-gray-500{color:var(--d-t500)}
+.dinamic .group:hover .group-hover\:text-gray-600{color:var(--d-t600)}
+.dinamic .hover\:bg-amber-100:hover{background-color:var(--d-a100)}
+.dinamic .hover\:bg-brand-50:hover{background-color:var(--d-v50)}
+.dinamic .hover\:bg-brand-50\/40:hover{background-color:color-mix(in srgb, var(--d-v50) 40%, transparent)}
+.dinamic .hover\:bg-brand-50\/50:hover{background-color:color-mix(in srgb, var(--d-v50) 50%, transparent)}
+.dinamic .hover\:bg-brand-800:hover{background-color:var(--d-pri2);color:var(--d-on-pri)}
+.dinamic .hover\:bg-emerald-50:hover{background-color:var(--d-e50)}
+.dinamic .hover\:bg-emerald-500:hover{background-color:var(--d-es)}
+.dinamic .hover\:bg-emerald-700:hover{background-color:var(--d-es2)}
+.dinamic .hover\:bg-gray-100:hover{background-color:var(--d-g100)}
+.dinamic .hover\:bg-gray-100\/80:hover{background-color:color-mix(in srgb, var(--d-g100) 80%, transparent)}
+.dinamic .hover\:bg-gray-200\/60:hover{background-color:color-mix(in srgb, var(--d-g200) 60%, transparent)}
+.dinamic .hover\:bg-gray-50:hover{background-color:var(--d-g50)}
+.dinamic .hover\:bg-gray-50\/60:hover{background-color:color-mix(in srgb, var(--d-g50) 60%, transparent)}
+.dinamic .hover\:bg-gray-50\/70:hover{background-color:color-mix(in srgb, var(--d-g50) 70%, transparent)}
+.dinamic .hover\:bg-gray-50\/80:hover{background-color:color-mix(in srgb, var(--d-g50) 80%, transparent)}
+.dinamic .hover\:bg-gray-700:hover{background-color:var(--d-g800)}
+.dinamic .hover\:bg-red-50:hover{background-color:var(--d-r50)}
+.dinamic .hover\:bg-red-700:hover{background-color:var(--d-rs2)}
+.dinamic .hover\:bg-white:hover{background-color:var(--d-card)}
+.dinamic .hover\:bg-white\/10:hover{background-color:rgba(255,255,255,0.10)}
+.dinamic .hover\:bg-white\/5:hover{background-color:rgba(255,255,255,0.05)}
+.dinamic .hover\:bg-white\/60:hover{background-color:color-mix(in srgb, var(--d-card) 60%, transparent)}
+.dinamic .hover\:border-brand-300:hover{border-color:var(--d-vb2)}
+.dinamic .hover\:border-brand-500:hover{border-color:var(--d-pri)}
+.dinamic .hover\:border-emerald-200:hover{border-color:var(--d-eb)}
+.dinamic .hover\:border-gray-300:hover{border-color:var(--d-b300)}
+.dinamic .hover\:border-gray-400:hover{border-color:var(--d-b400)}
+.dinamic .hover\:border-red-200:hover{border-color:var(--d-rb)}
+.dinamic .hover\:border-violet-300:hover{border-color:#c4b5fd}
+.dinamic .hover\:ring-gray-200:hover{--tw-ring-color:var(--d-b200)}
+.dinamic .hover\:text-brand-700:hover{color:var(--d-vt)}
+.dinamic .hover\:text-emerald-700:hover{color:var(--d-et)}
+.dinamic .hover\:text-gray-600:hover{color:var(--d-t600)}
+.dinamic .hover\:text-gray-700:hover{color:var(--d-t700)}
+.dinamic .hover\:text-gray-800:hover{color:var(--d-t800)}
+.dinamic .hover\:text-gray-900:hover{color:var(--d-t900)}
+.dinamic .hover\:text-gray-950:hover{color:var(--d-t950)}
+.dinamic .hover\:text-red-200:hover{color:#fecaca}
+.dinamic .hover\:text-red-600:hover{color:var(--d-rt)}
+.dinamic .placeholder\:text-gray-400::placeholder{color:var(--d-t400)}
+.dinamic .ring-amber-100{--tw-ring-color:var(--d-ab)}
+.dinamic .ring-brand-100{--tw-ring-color:var(--d-vb1)}
+.dinamic .ring-brand-200{--tw-ring-color:var(--d-vb1)}
+.dinamic .ring-emerald-100{--tw-ring-color:var(--d-eb)}
+.dinamic .ring-gray-200{--tw-ring-color:var(--d-b200)}
+.dinamic .ring-red-100{--tw-ring-color:var(--d-rb)}
+.dinamic .text-amber-500{color:var(--d-at)}
+.dinamic .text-amber-600{color:var(--d-at)}
+.dinamic .text-amber-700{color:var(--d-at)}
+.dinamic .text-amber-800{color:var(--d-at)}
+.dinamic .text-amber-900{color:var(--d-at)}
+.dinamic .text-brand-500{color:var(--d-vt)}
+.dinamic .text-brand-600{color:var(--d-vt)}
+.dinamic .text-brand-700{color:var(--d-vt)}
+.dinamic .text-brand-800{color:var(--d-vt)}
+.dinamic .text-brand-900{color:var(--d-vt)}
+.dinamic .text-emerald-600{color:var(--d-et)}
+.dinamic .text-emerald-700{color:var(--d-et)}
+.dinamic .text-emerald-800{color:var(--d-et)}
+.dinamic .text-gray-100{color:var(--d-t100)}
+.dinamic .text-gray-200{color:var(--d-t200)}
+.dinamic .text-gray-300{color:var(--d-t300)}
+.dinamic .text-gray-400{color:var(--d-t400)}
+.dinamic .text-gray-500{color:var(--d-t500)}
+.dinamic .text-gray-600{color:var(--d-t600)}
+.dinamic .text-gray-700{color:var(--d-t700)}
+.dinamic .text-gray-800{color:var(--d-t800)}
+.dinamic .text-gray-900{color:var(--d-t900)}
+.dinamic .text-green-800{color:var(--d-et)}
+.dinamic .text-red-500{color:var(--d-rt)}
+.dinamic .text-red-600{color:var(--d-rt)}
+.dinamic .text-red-700{color:var(--d-rt)}
+.dinamic .text-red-800{color:var(--d-rt)}
+.dinamic.dark .hover\:border-violet-300:hover{border-color:rgba(139,92,246,.35)}
+
+  /* el menu negro va por encima de las reglas generadas */
+  .dinamic .sn-menu .bg-white,
+  .dinamic .sn-resumen .bg-white {
+    background-color: var(--d-card);
+  }
+}
+
+/* ---------------- animaciones ---------------- */
+@keyframes sn-entrar {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sn-titulo {
+  from {
+    opacity: 0;
+    transform: translateY(0.4em);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sn-aparecer {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sn-ventana {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sn-dock {
+  from {
+    opacity: 0;
+    transform: translate(-24px, -50%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+}
+@keyframes sn-desplegar {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* quien prefiere menos movimiento, no ve animaciones */
+@media (prefers-reduced-motion: reduce) {
+  .dinamic *,
+  .dinamic *::before,
+  .dinamic *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
