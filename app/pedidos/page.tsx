@@ -42,6 +42,7 @@ import { supabase } from "@/lib/supabase";
 import { EmptyState, NumInput, Pill, SkeletonRows, confirmar, notify, type PillTone } from "@/components/ui";
 import { Lateral, Segmento, Ventana, inputCls } from "@/components/Ventana";
 import { colorDe, iniciales } from "@/components/Paleta";
+import { useStockVivo } from "@/components/StockVivo";
 
 /* ---------------- tipos ---------------- */
 
@@ -271,6 +272,13 @@ function Pedidos() {
   useEffect(() => {
     cargar();
   }, [cargar]);
+
+  // en vivo: si alguien guarda una nota o llega mercancia, Por pedir se actualiza solo
+  const vivoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useStockVivo(() => {
+    if (vivoTimer.current) clearTimeout(vivoTimer.current);
+    vivoTimer.current = setTimeout(cargar, 1200);
+  });
 
   // viene de Facturas de compra: abrir la hoja y "Llego la mercancia"
   useEffect(() => {
