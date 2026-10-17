@@ -15,6 +15,7 @@ import {
   Eye,
   EyeOff,
   FilePlus2,
+  MessageCircle,
   Minus,
   Package,
   Pencil,
@@ -36,6 +37,7 @@ import { Campo, Ventana, inputCls } from "@/components/Ventana";
 import { colorDe, iniciales } from "@/components/Paleta";
 import { useAlClicFuera } from "@/components/useFuera";
 import { useStockVivo } from "@/components/StockVivo";
+import { useEstilo } from "@/components/Estilo";
 
 type ClientRow = {
   id: string;
@@ -123,11 +125,23 @@ function fechaBonita(iso: string) {
 }
 
 // pastilla de existencia de un repuesto
-function Existencia({ stock, supply, pide }: { stock?: number | null; supply?: string | null; pide?: number }) {
+// (en el tema Dinamic dice un poco mas, igual que en la muestra)
+function Existencia({
+  stock,
+  supply,
+  pide,
+  din,
+}: {
+  stock?: number | null;
+  supply?: string | null;
+  pide?: number;
+  din?: boolean;
+}) {
   if (supply === "PEDIDO")
     return (
-      <span className="text-[11px] px-1.5 py-px rounded-md bg-violet-50 text-violet-700 whitespace-nowrap">
-        bajo pedido{stock && Number(stock) > 0 ? ` · hay ${Number(stock)}` : ""}
+      <span className="sn-pill text-[11px] px-1.5 py-px rounded-md bg-violet-50 text-violet-700 whitespace-nowrap">
+        {din ? "bajo pedido · se pide al proveedor" : "bajo pedido"}
+        {stock && Number(stock) > 0 ? ` · hay ${Number(stock)}` : ""}
       </span>
     );
   if (stock === undefined || stock === null) return null;
@@ -135,17 +149,17 @@ function Existencia({ stock, supply, pide }: { stock?: number | null; supply?: s
   const falta = pide !== undefined && pide > s;
   if (s <= 0)
     return (
-      <span className="text-[11px] px-1.5 py-px rounded-md bg-red-50 text-red-600 whitespace-nowrap">
+      <span className="sn-pill text-[11px] px-1.5 py-px rounded-md bg-red-50 text-red-600 whitespace-nowrap">
         {pide !== undefined ? "se agotó · queda para pedido" : "agotado"}
       </span>
     );
   return (
     <span
-      className={`text-[11px] px-1.5 py-px rounded-md whitespace-nowrap ${
+      className={`sn-pill text-[11px] px-1.5 py-px rounded-md whitespace-nowrap ${
         falta ? "bg-amber-50 text-amber-800" : s <= 5 ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"
       }`}
     >
-      {falta ? `solo quedan ${s}` : `${s} en stock`}
+      {falta ? (din ? `solo quedan ${s} · al guardar eliges` : `solo quedan ${s}`) : din ? `${s} disponibles` : `${s} en stock`}
     </span>
   );
 }
@@ -201,6 +215,49 @@ function NuevaNotaInner() {
   const currentId = editId ?? savedNoteId;
 
   const tier = selectedClient?.price_tier ?? 1;
+
+  // ---------- tema Dinamic: la misma nota con otra forma (el Clasico no cambia) ----------
+  const din = useEstilo() === "dinamic";
+  // la linea parpadea cuando otro asesor se lleva ese repuesto
+  const [flash, setFlash] = useState<Record<string, boolean>>({});
+  // para la franja de color al editar: cuanto se ha cobrado y cuando se hizo
+  const [cobroNota, setCobroNota] = useState<{ total: number; paid: number; pending: number } | null>(null);
+  const [fechaNota, setFechaNota] = useState<string | null>(null);
+  const [yo, setYo] = useState("");
+  // la nota se creo en esta pantalla (no se abrio una vieja para editarla)
+  const [creadaAqui, setCreadaAqui] = useState(false);
+  function marcarFlash(id: string | null) {
+    if (!id) return;
+    setFlash((f) => ({ ...f, [id]: true }));
+    setTimeout(
+      () =>
+        setFlash((f) => {
+          const n = { ...f };
+          delete n[id];
+          return n;
+        }),
+      1600
+    );
+  }
+  useEffect(() => {
+    if (!din) return;
+    supabase.auth.getUser().then(({ data }) => setYo((data.user?.email ?? "").split("@")[0]));
+  }, [din]);
+  useEffect(() => {
+    if (!din || !currentId) {
+      setCobroNota(null);
+      return;
+    }
+    let sigue = true;
+    supabase.rpc("note_collection", { p_note_id: currentId }).then(({ data }) => {
+      if (!sigue || !data) return;
+      const d = data as { total: number; paid: number; pending: number };
+      setCobroNota({ total: Number(d.total) || 0, paid: Number(d.paid) || 0, pending: Number(d.pending) || 0 });
+    });
+    return () => {
+      sigue = false;
+    };
+  }, [din, currentId, lastSaved]);
 
   // los desplegables se cierran al hacer clic afuera o con Esc
   const cajaClientes = useRef<HTMLDivElement>(null);
@@ -270,6 +327,7 @@ function NuevaNotaInner() {
     setGapPercent(row.exchange_gap_percent ?? 0);
     setPaymentStatus(row.payment_status ?? "PENDIENTE");
     setDueDate(row.due_date ?? "");
+    setFechaNota(row.note_date ?? null);
     const sub = row.subtotal ?? 0;
     setDiscountPercent(sub > 0 ? Math.round(((row.discount ?? 0) / sub) * 10000) / 100 : 0);
     setSavedNoteNumber(row.sequence_number ?? null);
@@ -291,6 +349,8 @@ function NuevaNotaInner() {
     setGapPercent(0);
     setPaymentStatus("PENDIENTE");
     setDueDate("");
+    setFechaNota(null);
+    setCreadaAqui(false);
     setSavedNoteNumber(null);
     setSavedNoteId(null);
     savedIdRef.current = null;
@@ -339,6 +399,7 @@ function NuevaNotaInner() {
         const nuevo = c.estante + (it.tomado ?? 0);
         if (it.stock === nuevo) return it;
         cambio = true;
+        if (nuevo < Number(it.stock ?? 0) && it.quantity > nuevo) setTimeout(() => marcarFlash(it.product_id), 0);
         if (it.supply !== "PEDIDO" && it.quantity <= Number(it.stock ?? 0) && it.quantity > nuevo) {
           notify.aviso(
             nuevo <= 0 ? `${it.code_snapshot}: se agotó` : `${it.code_snapshot}: solo quedan ${nuevo}`,
@@ -811,6 +872,26 @@ function NuevaNotaInner() {
     }
   }
 
+  function editarCliente() {
+    if (!selectedClient) return;
+    setClientForm({
+      name: selectedClient.name ?? "",
+      tax_id: selectedClient.tax_id ?? "",
+      fiscal_address: selectedClient.fiscal_address ?? "",
+      phone: selectedClient.phone ?? "",
+      city: selectedClient.city ?? "",
+      state: selectedClient.state ?? "",
+      salesperson: selectedClient.salesperson ?? "",
+      price_tier: String(selectedClient.price_tier ?? 1),
+    });
+    setShowClientForm(true);
+  }
+
+  function cambiarCliente() {
+    setSelectedClient(null);
+    setTimeout(() => document.getElementById("buscar-cliente")?.focus(), 30);
+  }
+
   async function saveClient() {
     setSavingClient(true);
     setError(null);
@@ -977,6 +1058,10 @@ function NuevaNotaInner() {
     }
     savedIdRef.current = id;
     setSavedNoteId(id);
+    if (eraNueva) {
+      setCreadaAqui(true);
+      setFechaNota(isoLocal(new Date()));
+    }
     setSavedNoteNumber(numero ?? null);
     setLastSaved(snap);
 
@@ -1010,8 +1095,411 @@ function NuevaNotaInner() {
   const tBin = tasaPara("BS_BINANCE", tasas);
   const anulada = paymentStatus === "ANULADO";
 
+  // ======== piezas que solo usa el tema Dinamic ========
+  const numero4 = savedNoteNumber ? String(savedNoteNumber).padStart(4, "0") : "…";
+  // el titulo va en dos renglones, letra por letra
+  const tituloDin =
+    editId && !creadaAqui ? ["Editando", `nota #${numero4}`] : currentId ? ["Nota", `#${numero4}`] : ["Nueva", "nota"];
+  const nombreCliente = selectedClient?.name ?? (quickClientName || "Cliente eventual");
+  const hoyIso = isoLocal(new Date());
+  const diasVence = dueDate
+    ? Math.round((new Date(dueDate + "T00:00:00").getTime() - new Date(hoyIso + "T00:00:00").getTime()) / 86400000)
+    : null;
+  const textoVence =
+    diasVence === null ? "sin fecha de vencimiento" : diasVence === 0 ? "vence hoy" : `vence en ${diasVence} día${diasVence === 1 ? "" : "s"}`;
+  const pagado = cobroNota?.paid ?? 0;
+  const estadoNota: { k: string; t: string; s: string } = anulada
+    ? { k: "anulada", t: "Anulada", s: "no cuenta en ventas ni en cobranzas" }
+    : paymentStatus === "COBRADO" || (cobroNota && cobroNota.total > 0 && cobroNota.pending <= 0.005)
+    ? { k: "cobrada", t: "Cobrada", s: "pagada completa" }
+    : diasVence !== null && diasVence < 0
+    ? { k: "vencida", t: "Vencida", s: `venció hace ${-diasVence} día${diasVence === -1 ? "" : "s"}` }
+    : pagado > 0.005
+    ? { k: "abonada", t: `Abonada ${Math.round((pagado / (cobroNota?.total || 1)) * 100)}%`, s: textoVence }
+    : { k: "pendiente", t: "Por cobrar", s: textoVence };
+  const telCliente = (() => {
+    let t = (selectedClient?.phone ?? "").replace(/\D/g, "");
+    if (!t) return null;
+    if (t.startsWith("0")) t = "58" + t.slice(1);
+    else if (t.length === 10) t = "58" + t;
+    return t;
+  })();
+
+  const cabezaDin = (
+    <div className="sn-n-cabeza">
+      <Link href="/notas" className="sn-n-volver">
+        <ArrowLeft size={14} /> Notas
+      </Link>
+      <h1 className="sn-letras" aria-label={tituloDin.join(" ")}>
+        {tituloDin.map((linea, li) => (
+          <span key={li} className="sn-letras-linea" aria-hidden="true">
+            {[...linea].map((c, i) => (
+              <span key={i} style={{ animationDelay: `${(li * 9 + i) * 26}ms` }}>
+                {c === " " ? "\u00a0" : c}
+              </span>
+            ))}
+          </span>
+        ))}
+      </h1>
+      {currentId ? (
+        <div className={`sn-n-banner sn-b-${estadoNota.k}`}>
+          <span className="sn-n-banner-ic">
+            <Pencil size={17} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="sn-n-banner-t">
+              {nombreCliente} · {estadoNota.t}
+            </p>
+            <p className="sn-n-banner-s">
+              {[
+                fechaNota ? `Hecha el ${fechaBonita(fechaNota)}` : null,
+                cobroNota && cobroNota.total > 0 ? `abonado $${money(pagado)} de $${money(cobroNota.total)}` : null,
+                estadoNota.s,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
+          <span className="sn-n-banner-e">{dirty ? "● cambios sin guardar" : "✓ guardada"}</span>
+        </div>
+      ) : (
+        <p className="sn-n-sub">
+          {yo ? `Asesor: ${yo} · ` : ""}
+          {new Date().toLocaleDateString("es-VE", { weekday: "long", day: "numeric", month: "long" })} · el número se
+          asigna al guardar y nunca se repite
+        </p>
+      )}
+    </div>
+  );
+
+  const clienteDin = selectedClient && (
+    <>
+      <div className="sn-n-cli">
+        <span className="sn-n-cli-av" style={{ background: colorDe(selectedClient.name) }}>
+          {iniciales(selectedClient.name)}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="sn-n-cli-nom">{selectedClient.name}</p>
+          <p className="sn-n-cli-dato">
+            {[selectedClient.tax_id, selectedClient.city, selectedClient.phone].filter(Boolean).join(" · ") || "sin RIF ni teléfono"}
+          </p>
+          <div className="sn-n-chips">
+            <span className="sn-chip">Tarifa {TARIFAS[tier] ?? tier}</span>
+            <span className="sn-chip">
+              {Number(selectedClient.credit_days) > 0 ? `${selectedClient.credit_days} días de crédito` : "de contado"}
+            </span>
+            {vencido > 0.005 ? (
+              <span className="sn-chip sn-chip-roja">Vencido ${money(vencido)}</span>
+            ) : deuda > 0.005 ? (
+              <span className="sn-chip sn-chip-ambar">Debe ${money(deuda)}</span>
+            ) : (
+              <span className="sn-chip sn-chip-verde">Al día</span>
+            )}
+          </div>
+        </div>
+        {telCliente && (
+          <a href={`https://wa.me/${telCliente}`} target="_blank" rel="noreferrer" className="sn-n-wa" title="Escribirle por WhatsApp">
+            <MessageCircle size={18} />
+          </a>
+        )}
+        <button type="button" onClick={editarCliente} className="sn-n-mini" title="Editar cliente" aria-label="Editar cliente">
+          <Pencil size={15} />
+        </button>
+        <button type="button" onClick={cambiarCliente} className="sn-n-boton" title="Cambiar de cliente">
+          Cambiar
+        </button>
+      </div>
+      {deuda > 0.005 && (
+        <p className={`sn-n-deuda ${vencido > 0.005 ? "sn-n-deuda-roja" : ""}`}>
+          <AlertTriangle size={15} className="shrink-0" />
+          <span>
+            Te debe <b>${money(deuda)}</b>
+            {vencido > 0.005 && (
+              <>
+                , de eso <b>${money(vencido)} ya vencido</b>
+              </>
+            )}
+            .{" "}
+            <Link href={`/clientes?id=${selectedClient.id}`} className="underline underline-offset-2">
+              Ver su estado de cuenta
+            </Link>
+          </span>
+        </p>
+      )}
+    </>
+  );
+
+  // ======== piezas del cuadro de la derecha (el Clasico las usa en su orden de siempre) ========
+  const rMoneda = (
+    <>
+          <p className="text-[12px] font-medium text-gray-500 mb-2">Moneda de la nota</p>
+          <div role="radiogroup" aria-label="Moneda de la nota" className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-gray-100 mb-3">
+            {MONEDAS.map((m) => {
+              const on = currencyMode === m.k;
+              return (
+                <button
+                  key={m.k}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => elegirMoneda(m.k)}
+                  className={`rounded-lg px-2 py-1.5 text-center transition-colors ${
+                    on ? "bg-white shadow-card ring-1 ring-brand-200 text-brand-800" : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
+                  }`}
+                >
+                  <span className="block text-[13px] font-medium leading-tight">{m.t}</span>
+                  <span className={`block text-[10.5px] leading-tight ${on ? "text-brand-500" : "text-gray-400"}`}>{m.s}</span>
+                </button>
+              );
+            })}
+          </div>
+
+    </>
+  );
+  const rTasa = (
+    <>
+          {isForeign && (
+            <div className="flex gap-2 mb-3">
+              <div className="flex-1">
+                <label className="text-[11px] text-gray-500 mb-1 flex items-center gap-1.5 flex-wrap">
+                  Tasa ({curLabel} por $)
+                  {tasaHoy > 0 && exchangeRate === tasaHoy && <span className="text-[10.5px] text-emerald-700">· la de hoy</span>}
+                  {tasaHoy > 0 && exchangeRate !== tasaHoy && (
+                    <button type="button" onClick={() => setExchangeRate(tasaHoy)} className="text-[10.5px] text-brand-700 hover:underline">
+                      usar la de hoy ({tasaHoy.toLocaleString("es-VE")})
+                    </button>
+                  )}
+                </label>
+                <NumInput
+                  className={`w-full h-9 px-2.5 border rounded-lg text-[13px] text-right ${
+                    exchangeRate > 0 ? "border-gray-300" : "border-amber-300 bg-amber-50/40"
+                  }`}
+                  value={exchangeRate}
+                  onChange={setExchangeRate}
+                  placeholder="tasa de hoy"
+                  ariaLabel="Tasa del dia"
+                />
+              </div>
+              {currencyMode === "BS_BCV" && (
+                <div className="w-24">
+                  <label className="text-[11px] text-gray-500 block mb-1">Brecha %</label>
+                  <NumInput
+                    className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-[13px] text-right"
+                    value={gapPercent}
+                    onChange={setGapPercent}
+                    ariaLabel="Ajuste de brecha"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+    </>
+  );
+  const rSumas = (
+    <>
+          <div className="space-y-1 text-[13px]">
+            <div className="flex justify-between text-gray-500">
+              <span>Subtotal</span>
+              <span>${money(subtotal)}</span>
+            </div>
+            <div className="flex justify-between items-center text-gray-500">
+              <span className="flex items-center gap-1.5">
+                Descuento
+                <NumInput
+                  className="w-14 h-7 border border-gray-200 rounded-md px-1.5 text-[12.5px] text-right"
+                  value={discountPercent}
+                  onChange={setDiscountPercent}
+                  ariaLabel="Descuento en porcentaje"
+                />
+                %
+              </span>
+              <span>{discountAmount > 0 ? `−$${money(discountAmount)}` : "—"}</span>
+            </div>
+          </div>
+
+    </>
+  );
+  const rTotal = (
+    <>
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <div className="flex justify-between items-baseline">
+              <span className="text-[13px] text-gray-500">Total</span>
+              <span className={`text-[30px] font-semibold tracking-tight leading-none ${anulada ? "text-gray-400 line-through" : "text-gray-900"}`}>
+                {isForeign ? `${curLabel} ${fmt(total * effectiveRate)}` : `$${money(total)}`}
+              </span>
+            </div>
+            <p className="text-right text-[12px] text-gray-400 mt-1">
+              {isForeign
+                ? `equivale a $${money(total)}`
+                : tBcv > 0 || tBin > 0
+                ? [tBcv > 0 && `Bs ${fmt(total * tBcv)} BCV`, tBin > 0 && `Bs ${fmt(total * tBin)} Binance`].filter(Boolean).join(" · ")
+                : ""}
+            </p>
+          </div>
+
+    </>
+  );
+  const rRenta = (
+    <>
+          <button
+            onClick={() => setShowProfit((s) => !s)}
+            className="mt-3 w-full flex items-center justify-between rounded-lg px-3 py-2 bg-gray-50 text-[12.5px] text-gray-500 hover:text-gray-800"
+          >
+            <span className="flex items-center gap-1.5">
+              {showProfit ? <EyeOff size={13} /> : <Eye size={13} />} Rentabilidad
+            </span>
+            {showProfit ? (
+              <span className={profit >= 0 ? "text-emerald-700" : "text-red-600"}>
+                ${money(profit)} · {margin.toFixed(1)}%
+              </span>
+            ) : (
+              <span className="text-gray-300">oculta</span>
+            )}
+          </button>
+          {showProfit && (
+            <p className="text-[11.5px] text-gray-400 mt-1 px-1">Costo total ${money(totalCost)}. El costo de cada linea se puede corregir en la lista.</p>
+          )}
+
+    </>
+  );
+  const rError = (
+    <>
+          {error && <p className="mt-3 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-[12.5px] text-red-700">{error}</p>}
+
+    </>
+  );
+  const rGuardar = (
+    <>
+          <button
+            disabled={saving || items.length === 0 || (!!currentId && !dirty)}
+            onClick={saveNote}
+            className="sn-guardar mt-4 w-full h-11 rounded-[10px] inline-flex items-center justify-center gap-2 text-[14px] font-medium text-white bg-gradient-to-b from-brand-600 to-brand-800 border border-brand-900 shadow-[inset_0_1px_0_rgba(255,255,255,.18),0_4px_12px_-4px_rgba(36,58,102,.55)] hover:brightness-110 disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <Save size={16} />
+            {saving ? "Guardando..." : currentId ? (dirty ? "Guardar cambios" : "Todo guardado") : "Guardar nota"}
+            <kbd className="ml-1 text-[10.5px] px-1.5 py-px rounded-md bg-white/10 border border-white/20 text-white/80 font-sans">
+              Ctrl S
+            </kbd>
+          </button>
+
+    </>
+  );
+  const rBotones = (
+    <>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <Link
+              href={currentId ? `/notas/ver?id=${currentId}` : "#"}
+              onClick={(e) => {
+                if (!currentId) {
+                  e.preventDefault();
+                  notify.info("Guarda la nota primero", "Despues la puedes ver e imprimir.");
+                }
+              }}
+              className={`h-9 rounded-lg inline-flex items-center justify-center gap-1.5 text-[13px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300 ${
+                currentId ? "" : "opacity-50"
+              }`}
+            >
+              <Printer size={15} /> Imprimir
+            </Link>
+            <button
+              onClick={resetForm}
+              disabled={!currentId && items.length === 0}
+              className="h-9 rounded-lg inline-flex items-center justify-center gap-1.5 text-[13px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300 disabled:opacity-50"
+            >
+              <FilePlus2 size={15} /> Nueva nota
+            </button>
+          </div>
+
+    </>
+  );
+  const rEstado = (
+    <>
+          <p className="mt-3 text-[11.5px] text-center">
+            {dirty ? (
+              <span className="text-amber-700 inline-flex items-center gap-1">
+                <CircleDot size={12} /> Hay cambios sin guardar
+              </span>
+            ) : currentId ? (
+              <span className="text-emerald-700 inline-flex items-center gap-1">
+                <Check size={12} /> Guardada
+              </span>
+            ) : (
+              <span className="text-gray-400">Nota nueva, aun sin guardar</span>
+            )}
+          </p>
+    </>
+  );
+
+  // Dinamic: arriba el total grande, y el cobro y el vencimiento dentro del cuadro negro
+  const rTotalDin = (
+    <div className="sn-r-total">
+      <div className="sn-r-et">
+        <span>Total de la nota</span>
+        {currentId && savedNoteNumber ? <span className="sn-r-num">#{numero4}</span> : null}
+      </div>
+      <p className={`sn-r-monto ${anulada ? "sn-r-anulada" : ""}`}>
+        {isForeign ? `${curLabel} ${fmt(total * effectiveRate)}` : `$${money(total)}`}
+      </p>
+      <p className="sn-r-sub">
+        {unidades} unidades · {items.length} repuesto{items.length === 1 ? "" : "s"}
+        {isForeign ? ` · son $${money(total)}` : tBcv > 0 ? ` · Bs ${fmt(total * tBcv)} BCV` : ""}
+      </p>
+    </div>
+  );
+  const rCobroDin = (
+    <div className="sn-r-cobro">
+      <p className="sn-r-lab">Cobro</p>
+      <div className="sn-r-chips">
+        {[
+          ["PENDIENTE", "Por cobrar"],
+          ["COBRADO", "Cobrada"],
+          ["ANULADO", "Anulada"],
+        ].map(([k, l]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setPaymentStatus(k)}
+            className={`sn-r-chip ${paymentStatus === k ? (k === "ANULADO" ? "sn-r-chip-roja" : "sn-r-chip-on") : ""}`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+      <p className="sn-r-lab">
+        Vence{dueDate ? <span className="sn-r-lab-f"> · {fechaBonita(dueDate)}</span> : null}
+      </p>
+      <div className="sn-r-chips">
+        {(
+          [
+            [0, "hoy"],
+            [7, "+7 días"],
+            [15, "+15"],
+            [30, "+30"],
+          ] as [number, string][]
+        ).map(([d, l]) => (
+          <button
+            key={l}
+            type="button"
+            onClick={() => setDueDate(enDias(d))}
+            className={`sn-r-chip ${dueDate === enDias(d) ? "sn-r-chip-on" : ""}`}
+          >
+            {l}
+          </button>
+        ))}
+        <input
+          type="date"
+          className="sn-r-fecha"
+          value={dueDate}
+          onChange={(e) => setDueDate(e.target.value)}
+          aria-label="Fecha de vencimiento"
+        />
+      </div>
+    </div>
+  );
+
   return (
-    <main className="p-6 max-w-[1240px] pb-16">
+    <main className="sn-n p-6 max-w-[1240px] pb-16">
       {importar && (
         <ImportarPedido
           modo={importar}
@@ -1067,7 +1555,7 @@ function NuevaNotaInner() {
                       { k: "QUITAR", t: "Quitar de la nota", s: "El cliente no lo quiere esperar." },
                     ];
               return (
-                <div key={f.product_id} className="rounded-xl border border-gray-200 overflow-hidden">
+                <div key={f.product_id} className="sn-falta rounded-xl border border-gray-200 overflow-hidden">
                   <div className="px-3.5 py-2.5 bg-gray-50/70 flex items-center gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="text-[13.5px] text-gray-900 truncate">
@@ -1087,7 +1575,7 @@ function NuevaNotaInner() {
                     </div>
                   </div>
                   {ops.map((o) => (
-                    <label key={o.k} className="flex items-start gap-2.5 px-3.5 py-2 border-t border-gray-100 cursor-pointer hover:bg-gray-50">
+                    <label key={o.k} className="sn-opcion flex items-start gap-2.5 px-3.5 py-2 border-t border-gray-100 cursor-pointer hover:bg-gray-50">
                       <input
                         type="radio"
                         name={`dec-${f.product_id}`}
@@ -1109,6 +1597,9 @@ function NuevaNotaInner() {
       )}
 
       {/* ---------- encabezado ---------- */}
+      {din ? (
+        cabezaDin
+      ) : (
       <div className="flex items-end gap-3 mb-4">
         <div className="min-w-0">
           <Link href="/notas" className="inline-flex items-center gap-1 text-[12.5px] text-gray-500 hover:text-gray-900 mb-1">
@@ -1131,14 +1622,17 @@ function NuevaNotaInner() {
           </p>
         </div>
       </div>
+      )}
 
       <div className="grid lg:grid-cols-[1fr_340px] gap-4 items-start">
         {/* =================== izquierda =================== */}
         <div className="min-w-0 space-y-4">
           {/* ---------- cliente ---------- */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-card p-4">
-            <p className="text-[12px] font-medium text-gray-500 mb-2">Cliente</p>
-            {selectedClient ? (
+          <div className="sn-n-tarjeta bg-white border border-gray-200 rounded-xl shadow-card p-4">
+            <p className="sn-n-titulo text-[12px] font-medium text-gray-500 mb-2">Cliente</p>
+            {selectedClient && din ? (
+              clienteDin
+            ) : selectedClient ? (
               <>
                 <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50/50">
                   <span
@@ -1173,29 +1667,14 @@ function NuevaNotaInner() {
                   </div>
                   <div className="flex gap-1 shrink-0">
                     <button
-                      onClick={() => {
-                        setClientForm({
-                          name: selectedClient.name ?? "",
-                          tax_id: selectedClient.tax_id ?? "",
-                          fiscal_address: selectedClient.fiscal_address ?? "",
-                          phone: selectedClient.phone ?? "",
-                          city: selectedClient.city ?? "",
-                          state: selectedClient.state ?? "",
-                          salesperson: selectedClient.salesperson ?? "",
-                          price_tier: String(selectedClient.price_tier ?? 1),
-                        });
-                        setShowClientForm(true);
-                      }}
+                      onClick={editarCliente}
                       title="Editar cliente"
                       className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-white"
                     >
                       <Pencil size={15} />
                     </button>
                     <button
-                      onClick={() => {
-                        setSelectedClient(null);
-                        setTimeout(() => document.getElementById("buscar-cliente")?.focus(), 30);
-                      }}
+                      onClick={cambiarCliente}
                       title="Cambiar de cliente"
                       className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-white"
                     >
@@ -1240,7 +1719,7 @@ function NuevaNotaInner() {
                     onKeyDown={teclaClientes}
                   />
                   {verClientes && clientResults.length > 0 && (
-                    <div className="absolute left-0 right-0 top-12 z-30 rounded-xl bg-white border border-gray-200 shadow-pop p-1.5 max-h-80 overflow-y-auto">
+                    <div className="sn-desp absolute left-0 right-0 top-12 z-30 rounded-xl bg-white border border-gray-200 shadow-pop p-1.5 max-h-80 overflow-y-auto">
                       {clientResults.map((c, k) => {
                         const d = Number(c.balance_due) || 0;
                         const v = Number(c.overdue) || 0;
@@ -1285,7 +1764,7 @@ function NuevaNotaInner() {
                     </div>
                   )}
                 </div>
-                <div className="flex gap-2 items-center mt-2.5">
+                <div className="sn-n-rapido flex gap-2 items-center mt-2.5">
                   <input
                     className="flex-1 h-9 px-3 border border-gray-200 rounded-lg text-[13px] bg-white"
                     placeholder="O un cliente rapido, sin registrar (ej: Mostrador)"
@@ -1307,16 +1786,16 @@ function NuevaNotaInner() {
           </div>
 
           {/* ---------- productos ---------- */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-card">
-            <div className="flex items-center gap-2 flex-wrap px-4 pt-4 pb-3">
-              <p className="text-[12px] font-medium text-gray-500">Productos</p>
+          <div className="sn-n-tarjeta sn-n-repuestos bg-white border border-gray-200 rounded-xl shadow-card">
+            <div className="sn-n-cabrep flex items-center gap-2 flex-wrap px-4 pt-4 pb-3">
+              <p className="sn-n-titulo text-[12px] font-medium text-gray-500">{din ? "Repuestos" : "Productos"}</p>
               {items.length > 0 && (
                 <span className="text-[11.5px] text-gray-400">
                   · {items.length} linea{items.length === 1 ? "" : "s"} · {unidades} unidades
                 </span>
               )}
               <div className="flex-1" />
-              <div className="inline-flex rounded-lg border border-brand-200 bg-brand-50/60 p-0.5">
+              <div className="sn-n-grupo inline-flex rounded-lg border border-brand-200 bg-brand-50/60 p-0.5">
                 <button
                   onClick={() => setImportar("pdf")}
                   title="Leer un presupuesto o factura de FactuSOL en PDF"
@@ -1335,13 +1814,13 @@ function NuevaNotaInner() {
               </div>
               <button
                 onClick={() => setShowPicker(true)}
-                className="h-8 px-2.5 rounded-lg inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                className="sn-n-acc h-8 px-2.5 rounded-lg inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300"
               >
                 <BookOpen size={14} /> Catalogo
               </button>
               <button
                 onClick={addManualProduct}
-                className="h-8 px-2.5 rounded-lg inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                className="sn-n-acc h-8 px-2.5 rounded-lg inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300"
               >
                 <Plus size={14} /> Producto manual
               </button>
@@ -1358,7 +1837,7 @@ function NuevaNotaInner() {
                 onKeyDown={teclaBuscador}
               />
               {results.length > 0 && (
-                <div className="absolute left-4 right-4 top-12 z-30 rounded-xl bg-white border border-gray-200 shadow-pop p-1.5 max-h-96 overflow-y-auto">
+                <div className="sn-desp absolute left-4 right-4 top-12 z-30 rounded-xl bg-white border border-gray-200 shadow-pop p-1.5 max-h-96 overflow-y-auto">
                   {results.map((p, k) => (
                     <button
                       key={p.id}
@@ -1379,7 +1858,7 @@ function NuevaNotaInner() {
                           </span>
                         )}
                       </span>
-                      <Existencia stock={vivo[p.id] ?? p.stock_quantity} supply={p.supply_type} />
+                      <Existencia stock={vivo[p.id] ?? p.stock_quantity} supply={p.supply_type} din={din} />
                       <span className="w-20 shrink-0 text-right text-[13px] font-semibold text-gray-900">
                         ${money(priceOf(p, tier))}
                       </span>
@@ -1393,8 +1872,8 @@ function NuevaNotaInner() {
             </div>
 
             {/* lineas */}
-            <div className="border-t border-gray-100">
-              <div className="flex gap-3 items-center px-4 h-9 text-[11px] font-medium text-gray-400 bg-gray-50/60 border-b border-gray-100">
+            <div className="sn-n-lineas border-t border-gray-100">
+              <div className="sn-n-cab flex gap-3 items-center px-4 h-9 text-[11px] font-medium text-gray-400 bg-gray-50/60 border-b border-gray-100">
                 <span className="w-28">Codigo</span>
                 <span className="flex-1 min-w-0">Producto</span>
                 <span className="w-[104px] text-center">Cantidad</span>
@@ -1405,7 +1884,7 @@ function NuevaNotaInner() {
               </div>
 
               {items.length === 0 && (
-                <div className="px-4 py-8 text-center">
+                <div className="sn-n-vacio px-4 py-8 text-center">
                   <span className="w-12 h-12 rounded-2xl bg-gray-100 text-gray-500 flex items-center justify-center mx-auto mb-2">
                     <Package size={20} />
                   </span>
@@ -1418,11 +1897,16 @@ function NuevaNotaInner() {
                 const pocoStock =
                   it.product_id && it.supply !== "PEDIDO" && it.stock !== undefined && it.stock !== null && it.quantity > Number(it.stock);
                 return (
-                  <div key={i} className="group flex gap-3 items-start px-4 py-2.5 border-b border-gray-100 hover:bg-gray-50/60">
+                  <div
+                    key={i}
+                    className={`sn-linea group flex gap-3 items-start px-4 py-2.5 border-b border-gray-100 hover:bg-gray-50/60 ${
+                      it.product_id && flash[it.product_id] ? "sn-flash" : ""
+                    }`}
+                  >
                     <div className="w-28 shrink-0">
                       <input
                         id={`cod-${i}`}
-                        className={`w-full h-8 px-2 border rounded-lg font-mono text-[11.5px] ${
+                        className={`sn-l-cod w-full h-8 px-2 border rounded-lg font-mono text-[11.5px] ${
                           it.product_id ? "border-gray-200 text-gray-600 bg-white" : "border-amber-300 bg-amber-50/60"
                         }`}
                         placeholder="Codigo"
@@ -1443,7 +1927,7 @@ function NuevaNotaInner() {
                     <div className="flex-1 min-w-0">
                       <input
                         id={`desc-${i}`}
-                        className="w-full h-8 px-2 border border-gray-200 rounded-lg text-[13px] bg-white"
+                        className="sn-l-desc w-full h-8 px-2 border border-gray-200 rounded-lg text-[13px] bg-white"
                         placeholder="Descripcion"
                         value={it.description_snapshot}
                         onChange={(e) => updateItemText(i, "description_snapshot", e.target.value)}
@@ -1451,26 +1935,30 @@ function NuevaNotaInner() {
                       />
                       <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         {it.product_id ? (
-                          <Existencia stock={it.stock} supply={it.supply} pide={it.quantity} />
+                          // en Dinamic, si ya se decidio como entregarlo, basta con la pastilla de lo entregado
+                          din && pocoStock && it.modo ? null : (
+                            <Existencia stock={it.stock} supply={it.supply} pide={it.quantity} din={din} />
+                          )
                         ) : (
-                          <span className="text-[11px] px-1.5 py-px rounded-md bg-amber-50 text-amber-800">fuera del catalogo</span>
+                          <span className="sn-pill text-[11px] px-1.5 py-px rounded-md bg-amber-50 text-amber-800">fuera del catalogo</span>
                         )}
                         {pocoStock && it.modo === "ESPERAR" ? (
-                          <span className="text-[11px] text-violet-700">el cliente espera a que llegue completo</span>
+                          <span className="sn-l-nota text-[11px] text-violet-700">el cliente espera a que llegue completo</span>
                         ) : pocoStock && it.modo === "PARCIAL" && (it.tomado ?? 0) > 0 ? (
-                          <span className="text-[11px] text-amber-700">
+                          <span className="sn-l-nota text-[11px] text-amber-700">
                             {it.tomado} entregadas · {it.quantity - (it.tomado ?? 0)} esperando en Pedidos
                           </span>
                         ) : (
                           pocoStock &&
-                          Number(it.stock) > 0 && (
-                            <span className="text-[11px] text-amber-700">al guardar eliges: entregar {Number(it.stock)} o esperar todo</span>
+                          Number(it.stock) > 0 &&
+                          !din && (
+                            <span className="sn-l-nota text-[11px] text-amber-700">al guardar eliges: entregar {Number(it.stock)} o esperar todo</span>
                           )
                         )}
                       </div>
                     </div>
                     <div className="w-[104px] shrink-0 flex items-center justify-center">
-                      <div className="inline-flex items-center h-8 border border-gray-200 rounded-lg bg-white overflow-hidden">
+                      <div className="sn-paso inline-flex items-center h-8 border border-gray-200 rounded-lg bg-white overflow-hidden">
                         <button
                           onClick={() => sumar(i, -1)}
                           aria-label="Uno menos"
@@ -1498,14 +1986,14 @@ function NuevaNotaInner() {
                     <div className="w-[120px] shrink-0">
                       <NumInput
                         id={`prec-${i}`}
-                        className="w-full h-8 px-2 border border-gray-200 rounded-lg text-[13px] text-right bg-white"
+                        className="sn-l-precio w-full h-8 px-2 border border-gray-200 rounded-lg text-[13px] text-right bg-white"
                         value={it.unit_price}
                         onChange={(n) => updateItem(i, "unit_price", n)}
                         onKeyDown={(e) => onGridKey(e, i, 3)}
                         ariaLabel="Precio"
                       />
                       {it.prices && (
-                        <div className="mt-1 flex items-center justify-end gap-1">
+                        <div className="sn-l-tarifas mt-1 flex items-center justify-end gap-1">
                           {[1, 2, 3, 4].map((t) =>
                             it.prices?.[t - 1] != null ? (
                               <button
@@ -1529,7 +2017,7 @@ function NuevaNotaInner() {
                       )}
                     </div>
                     <div className="w-24 shrink-0 text-right pt-1.5">
-                      <span className="text-[13.5px] font-semibold text-gray-900">{money(it.line_total)}</span>
+                      <span className="sn-l-total text-[13.5px] font-semibold text-gray-900">{money(it.line_total)}</span>
                       {showProfit && (
                         <div className="mt-1 flex items-center justify-end gap-1">
                           <NumInput
@@ -1564,7 +2052,7 @@ function NuevaNotaInner() {
                         onClick={() => removeItem(i)}
                         title="Quitar linea"
                         aria-label="Quitar linea"
-                        className="w-7 h-7 rounded-md flex items-center justify-center text-gray-300 group-hover:text-gray-500 hover:!text-red-600 hover:bg-red-50"
+                        className="sn-l-quitar w-7 h-7 rounded-md flex items-center justify-center text-gray-300 group-hover:text-gray-500 hover:!text-red-600 hover:bg-red-50"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -1574,11 +2062,11 @@ function NuevaNotaInner() {
               })}
 
               {/* Linea vacia: escribe el codigo y Enter la convierte en linea real */}
-              <div className="relative flex items-center gap-3 px-4 py-3">
+              <div className="sn-l-nueva relative flex items-center gap-3 px-4 py-3">
                 <input
                   id="cod-nuevo"
                   autoComplete="off"
-                  className="w-64 h-8 px-2.5 border border-dashed border-gray-300 rounded-lg text-[12.5px] focus:border-solid focus:border-brand-400 focus:outline-none bg-white"
+                  className="sn-l-nuevo w-64 h-8 px-2.5 border border-dashed border-gray-300 rounded-lg text-[12.5px] focus:border-solid focus:border-brand-400 focus:outline-none bg-white"
                   placeholder="+ codigo o nombre, y Enter…"
                   value={newCode}
                   onChange={(e) => suggestNew(e.target.value)}
@@ -1594,7 +2082,7 @@ function NuevaNotaInner() {
                 )}
 
                 {newHits.length > 0 && (
-                  <div className="absolute left-4 bottom-full mb-1 z-30 w-[520px] bg-white border border-gray-200 rounded-xl shadow-pop p-1.5">
+                  <div className="sn-desp absolute left-4 bottom-full mb-1 z-30 w-[520px] bg-white border border-gray-200 rounded-xl shadow-pop p-1.5">
                     {newHits.map((h, k) => (
                       <button
                         key={h.id}
@@ -1610,7 +2098,7 @@ function NuevaNotaInner() {
                       >
                         <span className="w-20 shrink-0 font-mono text-[10.5px] text-gray-500 truncate">{h.code}</span>
                         <span className="flex-1 min-w-0 truncate text-[12.5px] text-gray-800">{h.description}</span>
-                        <Existencia stock={vivo[h.id] ?? h.stock_quantity} supply={h.supply_type} />
+                        <Existencia stock={vivo[h.id] ?? h.stock_quantity} supply={h.supply_type} din={din} />
                         <span className="shrink-0 w-16 text-right text-[12px] text-gray-900">${money(priceOf(h, tier))}</span>
                       </button>
                     ))}
@@ -1623,7 +2111,8 @@ function NuevaNotaInner() {
             </div>
           </div>
 
-          {/* ---------- cobro ---------- */}
+          {/* ---------- cobro (en el tema Dinamic va dentro del cuadro negro) ---------- */}
+          {!din && (
           <div className="bg-white border border-gray-200 rounded-xl shadow-card p-4">
             <p className="text-[12px] font-medium text-gray-500 mb-2.5">Cobro</p>
             <div className="flex flex-wrap items-end gap-4">
@@ -1687,174 +2176,37 @@ function NuevaNotaInner() {
               )}
             </div>
           </div>
+          )}
         </div>
 
         {/* =================== derecha: resumen fijo =================== */}
         <aside className="sn-resumen lg:sticky lg:top-[68px] bg-white border border-gray-200 rounded-xl shadow-card p-4">
-          <p className="text-[12px] font-medium text-gray-500 mb-2">Moneda de la nota</p>
-          <div role="radiogroup" aria-label="Moneda de la nota" className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-gray-100 mb-3">
-            {MONEDAS.map((m) => {
-              const on = currencyMode === m.k;
-              return (
-                <button
-                  key={m.k}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  onClick={() => elegirMoneda(m.k)}
-                  className={`rounded-lg px-2 py-1.5 text-center transition-colors ${
-                    on ? "bg-white shadow-card ring-1 ring-brand-200 text-brand-800" : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
-                  }`}
-                >
-                  <span className="block text-[13px] font-medium leading-tight">{m.t}</span>
-                  <span className={`block text-[10.5px] leading-tight ${on ? "text-brand-500" : "text-gray-400"}`}>{m.s}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {isForeign && (
-            <div className="flex gap-2 mb-3">
-              <div className="flex-1">
-                <label className="text-[11px] text-gray-500 mb-1 flex items-center gap-1.5 flex-wrap">
-                  Tasa ({curLabel} por $)
-                  {tasaHoy > 0 && exchangeRate === tasaHoy && <span className="text-[10.5px] text-emerald-700">· la de hoy</span>}
-                  {tasaHoy > 0 && exchangeRate !== tasaHoy && (
-                    <button type="button" onClick={() => setExchangeRate(tasaHoy)} className="text-[10.5px] text-brand-700 hover:underline">
-                      usar la de hoy ({tasaHoy.toLocaleString("es-VE")})
-                    </button>
-                  )}
-                </label>
-                <NumInput
-                  className={`w-full h-9 px-2.5 border rounded-lg text-[13px] text-right ${
-                    exchangeRate > 0 ? "border-gray-300" : "border-amber-300 bg-amber-50/40"
-                  }`}
-                  value={exchangeRate}
-                  onChange={setExchangeRate}
-                  placeholder="tasa de hoy"
-                  ariaLabel="Tasa del dia"
-                />
-              </div>
-              {currencyMode === "BS_BCV" && (
-                <div className="w-24">
-                  <label className="text-[11px] text-gray-500 block mb-1">Brecha %</label>
-                  <NumInput
-                    className="w-full h-9 px-2.5 border border-gray-300 rounded-lg text-[13px] text-right"
-                    value={gapPercent}
-                    onChange={setGapPercent}
-                    ariaLabel="Ajuste de brecha"
-                  />
-                </div>
-              )}
-            </div>
+          {din ? (
+            <>
+              {rTotalDin}
+              {rMoneda}
+              {rTasa}
+              {rSumas}
+              {rCobroDin}
+              {rRenta}
+              {rError}
+              {rGuardar}
+              {rBotones}
+              {rEstado}
+            </>
+          ) : (
+            <>
+              {rMoneda}
+              {rTasa}
+              {rSumas}
+              {rTotal}
+              {rRenta}
+              {rError}
+              {rGuardar}
+              {rBotones}
+              {rEstado}
+            </>
           )}
-
-          <div className="space-y-1 text-[13px]">
-            <div className="flex justify-between text-gray-500">
-              <span>Subtotal</span>
-              <span>${money(subtotal)}</span>
-            </div>
-            <div className="flex justify-between items-center text-gray-500">
-              <span className="flex items-center gap-1.5">
-                Descuento
-                <NumInput
-                  className="w-14 h-7 border border-gray-200 rounded-md px-1.5 text-[12.5px] text-right"
-                  value={discountPercent}
-                  onChange={setDiscountPercent}
-                  ariaLabel="Descuento en porcentaje"
-                />
-                %
-              </span>
-              <span>{discountAmount > 0 ? `−$${money(discountAmount)}` : "—"}</span>
-            </div>
-          </div>
-
-          <div className="mt-3 pt-3 border-t border-gray-200">
-            <div className="flex justify-between items-baseline">
-              <span className="text-[13px] text-gray-500">Total</span>
-              <span className={`text-[30px] font-semibold tracking-tight leading-none ${anulada ? "text-gray-400 line-through" : "text-gray-900"}`}>
-                {isForeign ? `${curLabel} ${fmt(total * effectiveRate)}` : `$${money(total)}`}
-              </span>
-            </div>
-            <p className="text-right text-[12px] text-gray-400 mt-1">
-              {isForeign
-                ? `equivale a $${money(total)}`
-                : tBcv > 0 || tBin > 0
-                ? [tBcv > 0 && `Bs ${fmt(total * tBcv)} BCV`, tBin > 0 && `Bs ${fmt(total * tBin)} Binance`].filter(Boolean).join(" · ")
-                : ""}
-            </p>
-          </div>
-
-          <button
-            onClick={() => setShowProfit((s) => !s)}
-            className="mt-3 w-full flex items-center justify-between rounded-lg px-3 py-2 bg-gray-50 text-[12.5px] text-gray-500 hover:text-gray-800"
-          >
-            <span className="flex items-center gap-1.5">
-              {showProfit ? <EyeOff size={13} /> : <Eye size={13} />} Rentabilidad
-            </span>
-            {showProfit ? (
-              <span className={profit >= 0 ? "text-emerald-700" : "text-red-600"}>
-                ${money(profit)} · {margin.toFixed(1)}%
-              </span>
-            ) : (
-              <span className="text-gray-300">oculta</span>
-            )}
-          </button>
-          {showProfit && (
-            <p className="text-[11.5px] text-gray-400 mt-1 px-1">Costo total ${money(totalCost)}. El costo de cada linea se puede corregir en la lista.</p>
-          )}
-
-          {error && <p className="mt-3 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-[12.5px] text-red-700">{error}</p>}
-
-          <button
-            disabled={saving || items.length === 0 || (!!currentId && !dirty)}
-            onClick={saveNote}
-            className="sn-guardar mt-4 w-full h-11 rounded-[10px] inline-flex items-center justify-center gap-2 text-[14px] font-medium text-white bg-gradient-to-b from-brand-600 to-brand-800 border border-brand-900 shadow-[inset_0_1px_0_rgba(255,255,255,.18),0_4px_12px_-4px_rgba(36,58,102,.55)] hover:brightness-110 disabled:opacity-40 disabled:pointer-events-none"
-          >
-            <Save size={16} />
-            {saving ? "Guardando..." : currentId ? (dirty ? "Guardar cambios" : "Todo guardado") : "Guardar nota"}
-            <kbd className="ml-1 text-[10.5px] px-1.5 py-px rounded-md bg-white/10 border border-white/20 text-white/80 font-sans">
-              Ctrl S
-            </kbd>
-          </button>
-
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            <Link
-              href={currentId ? `/notas/ver?id=${currentId}` : "#"}
-              onClick={(e) => {
-                if (!currentId) {
-                  e.preventDefault();
-                  notify.info("Guarda la nota primero", "Despues la puedes ver e imprimir.");
-                }
-              }}
-              className={`h-9 rounded-lg inline-flex items-center justify-center gap-1.5 text-[13px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300 ${
-                currentId ? "" : "opacity-50"
-              }`}
-            >
-              <Printer size={15} /> Imprimir
-            </Link>
-            <button
-              onClick={resetForm}
-              disabled={!currentId && items.length === 0}
-              className="h-9 rounded-lg inline-flex items-center justify-center gap-1.5 text-[13px] border border-gray-200 bg-white text-gray-700 hover:border-gray-300 disabled:opacity-50"
-            >
-              <FilePlus2 size={15} /> Nueva nota
-            </button>
-          </div>
-
-          <p className="mt-3 text-[11.5px] text-center">
-            {dirty ? (
-              <span className="text-amber-700 inline-flex items-center gap-1">
-                <CircleDot size={12} /> Hay cambios sin guardar
-              </span>
-            ) : currentId ? (
-              <span className="text-emerald-700 inline-flex items-center gap-1">
-                <Check size={12} /> Guardada
-              </span>
-            ) : (
-              <span className="text-gray-400">Nota nueva, aun sin guardar</span>
-            )}
-          </p>
         </aside>
       </div>
 
