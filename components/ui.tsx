@@ -154,14 +154,14 @@ export function DialogoConfirmar({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-[2px]"
+      className="sn-velo fixed inset-0 z-[70] flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-[2px]"
       onMouseDown={onNo}
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirmar-titulo"
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-white shadow-pop border border-gray-200/80 overflow-hidden"
+        className="sn-ventana w-full max-w-md rounded-2xl bg-white shadow-pop border border-gray-200/80 overflow-hidden"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex gap-3.5 p-5">
