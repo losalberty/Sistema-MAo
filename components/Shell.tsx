@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -11,6 +11,7 @@ import {
   ClipboardList,
   Coins,
   FileText,
+  HandCoins,
   LayoutDashboard,
   LogOut,
   Moon,
@@ -33,6 +34,7 @@ import Paleta from "@/components/Paleta";
 import { NumInput, notify } from "@/components/ui";
 import { useAlClicFuera } from "@/components/useFuera";
 import { guardarTasas, sonDeHoy, useTasas } from "@/components/Tasas";
+import { useEstilo, useEstiloDelUsuario } from "@/components/Estilo";
 
 type Item = { label: string; icon: LucideIcon; href: string; aviso?: "vencidas" | "reponer" };
 type Grupo = { titulo: string | null; items: Item[] };
@@ -116,6 +118,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [avisos, setAvisos] = useState<Avisos | null>(null);
   const [verAvisos, setVerAvisos] = useState(false);
   const [oscuro, setOscuro] = useState(false);
+  // tema: Clasico (el menu de siempre a la izquierda) o Dinamic (pastillas arriba y barra flotante)
+  const estilo = useEstilo();
+  useEstiloDelUsuario();
 
   // modo oscuro: se recuerda en esta computadora
   useEffect(() => {
@@ -234,11 +239,45 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const { grupo, titulo } = migas(pathname);
   const totalAvisos = (avisos?.vencidas_count ?? 0) + (avisos?.semana_count ?? 0);
 
+  // ================= tema Dinamic: otro marco, las mismas funciones =================
+  if (estilo === "dinamic") {
+    // el buscador va fuera del contenido: el contenido entra con una animacion que lo haria visible
+    return (
+      <>
+        <MarcoDinamic
+          pathname={pathname}
+          email={email}
+          avisos={avisos}
+          totalAvisos={totalAvisos}
+          verAvisos={verAvisos}
+          cajaAvisos={cajaAvisos}
+          oscuro={oscuro}
+          onTema={cambiarTema}
+          onBuscar={() => setPaleta(true)}
+          onAvisos={() => {
+            setVerAvisos((v) => !v);
+            cargarAvisos(true);
+          }}
+          onIr={(href) => {
+            setVerAvisos(false);
+            router.push(href);
+          }}
+          onSalir={handleLogout}
+          isActive={isActive}
+        >
+          {ready ? children : null}
+        </MarcoDinamic>
+        <Paleta abierto={paleta} onClose={() => setPaleta(false)} />
+      </>
+    );
+  }
+
+  // ================= tema Clasico: exactamente el de siempre =================
   return (
     <div className="min-h-screen flex">
       {/* =================== menu izquierdo =================== */}
       <aside
-        className={`sticky top-0 h-screen bg-[#fbfbfc] border-r border-gray-200/80 flex flex-col shrink-0 print:hidden transition-[width] duration-200 ${
+        className={`sn-menu sticky top-0 h-screen bg-[#fbfbfc] border-r border-gray-200/80 flex flex-col shrink-0 print:hidden transition-[width] duration-200 ${
           collapsed ? "w-[64px]" : "w-[236px]"
         }`}
       >
@@ -246,7 +285,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         <div className={`flex items-center h-[56px] ${collapsed ? "justify-center" : "px-3.5 justify-between"}`}>
           {!collapsed && (
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="w-8 h-8 rounded-[9px] bg-gradient-to-br from-brand-500 to-brand-900 text-white flex items-center justify-center text-[12.5px] font-bold shrink-0 shadow-[inset_0_1px_0_rgba(255,255,255,.25),0_2px_6px_rgba(28,45,82,.35)]">
+              <span className="sn-logo w-8 h-8 rounded-[9px] bg-gradient-to-br from-brand-500 to-brand-900 text-white flex items-center justify-center text-[12.5px] font-bold shrink-0 shadow-[inset_0_1px_0_rgba(255,255,255,.25),0_2px_6px_rgba(28,45,82,.35)]">
                 SN
               </span>
               <div className="min-w-0">
@@ -313,11 +352,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                       key={item.href}
                       href={item.href}
                       title={item.label}
-                      className={`relative flex items-center gap-2.5 rounded-lg text-[13.5px] transition-colors ${
+                      className={`sn-enlace relative flex items-center gap-2.5 rounded-lg text-[13.5px] transition-colors ${
                         collapsed ? "justify-center h-9" : "px-2.5 h-[34px]"
                       } ${
                         active
-                          ? "bg-white text-gray-900 font-medium shadow-[0_1px_2px_rgba(16,24,40,.06)] ring-1 ring-gray-200"
+                          ? "sn-activo bg-white text-gray-900 font-medium shadow-[0_1px_2px_rgba(16,24,40,.06)] ring-1 ring-gray-200"
                           : "text-gray-600 hover:bg-gray-100/80 hover:text-gray-900"
                       }`}
                     >
@@ -377,7 +416,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
       {/* =================== contenido =================== */}
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="sticky top-0 z-30 h-[52px] flex items-center gap-2 px-6 border-b border-gray-200/80 bg-[#f5f6f8]/85 backdrop-blur-md backdrop-saturate-150 print:hidden">
+        <header className="sn-cabecera sticky top-0 z-30 h-[52px] flex items-center gap-2 px-6 border-b border-gray-200/80 bg-[#f5f6f8]/85 backdrop-blur-md backdrop-saturate-150 print:hidden">
           <div className="flex items-center gap-1.5 text-[13px] min-w-0">
             {grupo && (
               <>
@@ -444,7 +483,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           {pathname !== "/notas/nueva" && (
             <Link
               href="/notas/nueva"
-              className="h-[34px] pl-2.5 pr-2 rounded-[9px] inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 text-[13px] font-medium text-white bg-gradient-to-b from-brand-600 to-brand-800 border border-brand-900 shadow-[inset_0_1px_0_rgba(255,255,255,.18),0_4px_12px_-4px_rgba(36,58,102,.55)] hover:brightness-110 transition"
+              className="sn-nueva h-[34px] pl-2.5 pr-2 rounded-[9px] inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 text-[13px] font-medium text-white bg-gradient-to-b from-brand-600 to-brand-800 border border-brand-900 shadow-[inset_0_1px_0_rgba(255,255,255,.18),0_4px_12px_-4px_rgba(36,58,102,.55)] hover:brightness-110 transition"
             >
               <Plus size={15} strokeWidth={2.25} />
               Nueva nota
@@ -455,7 +494,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           )}
         </header>
 
-        <div className="flex-1 min-w-0">{ready ? children : null}</div>
+        <div className="sn-contenido flex-1 min-w-0">{ready ? children : null}</div>
       </div>
 
       <Paleta abierto={paleta} onClose={() => setPaleta(false)} />
@@ -464,10 +503,263 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 }
 
 /* ============================================================
+   MARCO DEL TEMA DINAMIC
+   - Arriba: marca, tasas del dia, buscar, campanita, luna y tu usuario.
+   - Debajo: el menu en pastillas (se queda pegado arriba al bajar),
+     con una pastilla negra que se desliza a la pantalla donde estas.
+   - A la izquierda: barra negra flotante con los atajos de siempre.
+   Son las mismas pantallas y los mismos datos; solo cambia el marco.
+   ============================================================ */
+
+const PILDORAS = GRUPOS.flatMap((g) => g.items).map((it) => ({
+  ...it,
+  corto: it.href === "/compras" ? "Compras" : it.label,
+}));
+
+type MarcoProps = {
+  children: React.ReactNode;
+  pathname: string;
+  email: string | null;
+  avisos: Avisos | null;
+  totalAvisos: number;
+  verAvisos: boolean;
+  cajaAvisos: React.RefObject<HTMLDivElement>;
+  oscuro: boolean;
+  onTema: () => void;
+  onBuscar: () => void;
+  onAvisos: () => void;
+  onIr: (href: string) => void;
+  onSalir: () => void;
+  isActive: (href: string) => boolean;
+};
+
+function MarcoDinamic(p: MarcoProps) {
+  const navRef = useRef<HTMLDivElement>(null);
+  const [pastilla, setPastilla] = useState<{ x: number; w: number } | null>(null);
+  const [verTasas, setVerTasas] = useState(false);
+  const [verYo, setVerYo] = useState(false);
+  const cajaTasas = useRef<HTMLDivElement>(null);
+  const cajaYo = useRef<HTMLDivElement>(null);
+  const cerrarTasas = useCallback(() => setVerTasas(false), []);
+  const cerrarYo = useCallback(() => setVerYo(false), []);
+  useAlClicFuera(cajaTasas, verTasas, cerrarTasas);
+  useAlClicFuera(cajaYo, verYo, cerrarYo);
+  const t = useTasas();
+  const deHoy = sonDeHoy(t);
+
+  // la pastilla negra se mueve debajo de la pantalla activa
+  const medir = useCallback(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const a = nav.querySelector<HTMLElement>("[data-activo='1']");
+    if (!a) return setPastilla(null);
+    setPastilla({ x: a.offsetLeft, w: a.offsetWidth });
+    // que la pantalla activa siempre se vea si el menu no cabe completo
+    const izq = a.offsetLeft - nav.scrollLeft;
+    if (izq < 0 || izq + a.offsetWidth > nav.clientWidth) nav.scrollTo({ left: a.offsetLeft - 24, behavior: "smooth" });
+  }, []);
+  useLayoutEffect(() => {
+    medir();
+  }, [p.pathname, medir]);
+  useEffect(() => {
+    window.addEventListener("resize", medir);
+    // cuando termina de cargar la letra, las pastillas cambian de ancho: se vuelve a medir
+    document.fonts?.ready.then(medir).catch(() => {});
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => medir()) : null;
+    navRef.current?.querySelectorAll("a").forEach((a) => ro?.observe(a));
+    return () => {
+      window.removeEventListener("resize", medir);
+      ro?.disconnect();
+    };
+  }, [medir]);
+
+  useEffect(() => {
+    setVerTasas(false);
+    setVerYo(false);
+  }, [p.pathname]);
+
+  const inicial = (p.email ?? "?").charAt(0).toUpperCase();
+  const fmt = (n: number | null | undefined, dec = 2) =>
+    n ? Number(n).toLocaleString("es-VE", { minimumFractionDigits: dec, maximumFractionDigits: dec }) : "—";
+
+  const atajo = (titulo: string, Icono: LucideIcon, accion: () => void, extra = "") => (
+    <button type="button" data-tip={titulo} aria-label={titulo} onClick={accion} className={`sn-d-atajo ${extra}`}>
+      <Icono size={19} strokeWidth={1.9} />
+    </button>
+  );
+
+  return (
+    <div className="sn-d min-h-screen">
+      {/* ---------- barra negra flotante (atajos) ---------- */}
+      <aside className="sn-d-dock print:hidden" aria-label="Atajos">
+        {atajo("Buscar · Ctrl K", Search, p.onBuscar)}
+        {p.pathname !== "/notas/nueva" && atajo("Nueva nota · N", Plus, () => p.onIr("/notas/nueva"), "sn-d-atajo-am")}
+        {atajo("Cobrar", HandCoins, () => p.onIr("/cobranzas"), p.isActive("/cobranzas") ? "sn-d-on" : "")}
+        {atajo("Pedidos", ClipboardList, () => p.onIr("/pedidos"), p.isActive("/pedidos") ? "sn-d-on" : "")}
+        {atajo("Inventario", Boxes, () => p.onIr("/inventario"), p.isActive("/inventario") ? "sn-d-on" : "")}
+        <hr />
+        {atajo("Ajustes y temas", Settings, () => p.onIr("/ajustes"), p.isActive("/ajustes") ? "sn-d-on" : "")}
+        {atajo(p.oscuro ? "Modo claro" : "Modo oscuro", p.oscuro ? Sun : Moon, p.onTema)}
+      </aside>
+
+      <div className="sn-d-marco">
+        {/* ---------- arriba: marca y herramientas ---------- */}
+        <div className="sn-d-arriba print:hidden">
+          <Link href="/" className="sn-d-marca" title="Ir al panel">
+            <span className="sn-d-logo">S</span>
+            <span className="sn-d-nombre">save notas</span>
+          </Link>
+          <span className="sn-d-insignia">Tema Dinamic</span>
+
+          <div className="sn-d-herr">
+            {/* tasas del dia */}
+            <div className="relative" ref={cajaTasas}>
+              <button
+                type="button"
+                onClick={() => setVerTasas((v) => !v)}
+                className={`sn-d-tasas ${deHoy ? "" : "sn-d-tasas-viejas"}`}
+                title={deHoy ? "Tasas de hoy · tocar para cambiarlas" : "Las tasas no son de hoy · tocar para ponerlas"}
+              >
+                <Coins size={15} />
+                {deHoy || t?.rate_date ? (
+                  <>
+                    <span>
+                      BCV <b>{fmt(t?.bcv)}</b>
+                    </span>
+                    <span className="sn-d-sep sn-d-t2" />
+                    <span className="sn-d-t2">
+                      Binance <b>{fmt(t?.binance)}</b>
+                    </span>
+                    <span className="sn-d-sep sn-d-t2" />
+                    <span className="sn-d-t2">
+                      Pesos <b>{fmt(t?.cop, 0)}</b>
+                    </span>
+                  </>
+                ) : (
+                  <span>Poner las tasas de hoy</span>
+                )}
+                {deHoy ? <span className="sn-d-punto-verde" /> : <span className="sn-d-aviso-tasas">actualizar</span>}
+              </button>
+              {verTasas && (
+                <div className="sn-d-pop absolute right-0 top-[50px] z-50 w-[300px]">
+                  <CajaTasas />
+                </div>
+              )}
+            </div>
+
+            <button type="button" onClick={p.onBuscar} className="sn-d-circ" title="Buscar (Ctrl + K)" aria-label="Buscar">
+              <Search size={17} />
+            </button>
+
+            {/* en pantallas angostas no cabe la barra negra: la luna pasa aqui */}
+            <button
+              type="button"
+              onClick={p.onTema}
+              className="sn-d-circ sn-d-solo-angosto"
+              title={p.oscuro ? "Modo claro" : "Modo oscuro"}
+              aria-label={p.oscuro ? "Modo claro" : "Modo oscuro"}
+            >
+              {p.oscuro ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+
+            <div className="relative" ref={p.cajaAvisos}>
+              <button
+                type="button"
+                onClick={p.onAvisos}
+                className={`sn-d-circ ${p.verAvisos ? "sn-d-circ-on" : ""}`}
+                title="Avisos"
+                aria-label="Avisos"
+              >
+                <Bell size={17} />
+                {p.totalAvisos > 0 && <span className="sn-d-globo">{p.totalAvisos > 9 ? "9+" : p.totalAvisos}</span>}
+              </button>
+              {p.verAvisos && <PanelAvisos avisos={p.avisos} onIr={p.onIr} dondeTasas="arriba, en la pastilla de las tasas" />}
+            </div>
+
+            <div className="relative" ref={cajaYo}>
+              <button
+                type="button"
+                onClick={() => setVerYo((v) => !v)}
+                className="sn-d-yo"
+                title={p.email ?? ""}
+                aria-label="Tu usuario"
+              >
+                {inicial}
+              </button>
+              {verYo && (
+                <div className="sn-flotante absolute right-0 top-[50px] z-50 w-[250px] rounded-xl bg-white border border-gray-200 shadow-pop p-1.5">
+                  <p className="px-3 pt-2 pb-1 text-[11.5px] text-gray-400">Sesión iniciada como</p>
+                  <p className="px-3 pb-2 text-[13px] font-medium text-gray-900 truncate">{p.email ?? "…"}</p>
+                  <button
+                    type="button"
+                    onClick={() => p.onIr("/ajustes")}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] text-gray-700 hover:bg-gray-50"
+                  >
+                    <Settings size={15} /> Ajustes y temas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={p.onSalir}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] text-red-600 hover:bg-red-50"
+                  >
+                    <LogOut size={15} /> Cerrar sesión
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ---------- menu en pastillas (se queda pegado arriba) ---------- */}
+        <div className="sn-d-menu print:hidden">
+          <nav ref={navRef} className="sn-d-pastillas" aria-label="Menú">
+            {pastilla && <span className="sn-d-indicador" style={{ transform: `translateX(${pastilla.x}px)`, width: pastilla.w }} />}
+            {PILDORAS.map((it) => {
+              const on = p.isActive(it.href);
+              const n = it.aviso === "vencidas" ? p.avisos?.vencidas_count ?? 0 : it.aviso === "reponer" ? p.avisos?.reponer ?? 0 : 0;
+              return (
+                <Link key={it.href} href={it.href} data-activo={on ? "1" : "0"} title={it.label} className={`sn-d-pildora ${on ? "sn-d-pildora-on" : ""}`}>
+                  {it.corto}
+                  {n > 0 && (
+                    <span
+                      className={`sn-d-cuenta ${it.aviso === "vencidas" ? "sn-d-cuenta-roja" : "sn-d-cuenta-ambar"}`}
+                      title={it.aviso === "vencidas" ? `${n} notas vencidas` : `${n} productos por reponer`}
+                    >
+                      {n}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+          {p.pathname !== "/notas/nueva" && (
+            <Link href="/notas/nueva" className="sn-d-nueva">
+              <Plus size={16} strokeWidth={2.4} />
+              Nueva nota
+              <kbd>N</kbd>
+            </Link>
+          )}
+        </div>
+
+        <div className="sn-contenido">{p.children}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
    Lista de la campanita
    ============================================================ */
 
-function PanelAvisos({ avisos, onIr }: { avisos: Avisos | null; onIr: (href: string) => void }) {
+function PanelAvisos({
+  avisos,
+  onIr,
+  dondeTasas = "abajo a la izquierda",
+}: {
+  avisos: Avisos | null;
+  onIr: (href: string) => void;
+  dondeTasas?: string;
+}) {
   const fila = (n: { id: string; sequence_number: number; cliente: string; falta: number; dias: number }, vencida: boolean) => (
     <button
       key={n.id}
@@ -487,7 +779,7 @@ function PanelAvisos({ avisos, onIr }: { avisos: Avisos | null; onIr: (href: str
   );
 
   return (
-    <div className="absolute right-0 top-10 z-50 w-[360px] rounded-xl bg-white border border-gray-200 shadow-pop overflow-hidden">
+    <div className="sn-flotante absolute right-0 top-10 z-50 w-[360px] rounded-xl bg-white border border-gray-200 shadow-pop overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center">
         <p className="text-[13.5px] font-semibold text-gray-900">Avisos</p>
         {avisos && (
@@ -501,8 +793,8 @@ function PanelAvisos({ avisos, onIr }: { avisos: Avisos | null; onIr: (href: str
 
         {avisos && !avisos.tasa_hoy && (
           <div className="mx-1 my-1 px-3 py-2.5 rounded-lg bg-amber-50 text-[12.5px] text-amber-800">
-            Todavia no pusiste las <b className="font-semibold">tasas de hoy</b>. Ponlas abajo a la izquierda y las notas las
-            toman solas.
+            Todavia no pusiste las <b className="font-semibold">tasas de hoy</b>. Ponlas {dondeTasas} y las notas las toman
+            solas.
           </div>
         )}
 
@@ -607,7 +899,7 @@ function CajaTasas() {
   );
 
   return (
-    <div className="mx-2.5 mb-2.5 rounded-xl border border-gray-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,.05)] px-2.5 py-2">
+    <div className="sn-tasas mx-2.5 mb-2.5 rounded-xl border border-gray-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,.05)] px-2.5 py-2">
       <div className="flex items-center gap-1.5 mb-1">
         <Coins size={13} className="text-gray-400" />
         <span className="text-[11.5px] text-gray-500">Tasas de hoy</span>
