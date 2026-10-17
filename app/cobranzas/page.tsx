@@ -18,6 +18,7 @@ import { supabase } from "@/lib/supabase";
 import { EmptyState, Pill, SkeletonRows, ToolbarButton, ToolbarSeparator, notify, type PillTone } from "@/components/ui";
 import { Barra, Campo, Encabezado, Lateral, Segmento, Tarjeta, descargarExcel } from "@/components/Ventana";
 import { colorDe, iniciales } from "@/components/Paleta";
+import { TituloLetras, useEstilo } from "@/components/Estilo";
 
 type Deudor = {
   display_name: string;
@@ -123,6 +124,8 @@ export default function CobranzasPage() {
   const [tab, setTab] = useState<"deben" | "cobros">("deben");
   const [cuenta, setCuenta] = useState<Cuenta | null>(null);
   const [soloVencidos, setSoloVencidos] = useState(false);
+  // tema Dinamic: numeros con circulo y cada deudor como una ficha de color (el Clasico no cambia)
+  const din = useEstilo() === "dinamic";
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -206,8 +209,55 @@ export default function CobranzasPage() {
   }
 
   return (
-    <main className="p-6 max-w-[1180px] print:p-0">
-      <Encabezado titulo="Cobranzas">Quien te debe y a quien le cobraste</Encabezado>
+    <main className="sn-cb p-6 max-w-[1180px] print:p-0">
+      {din ? (
+        <div className="sn-p-cabeza print:hidden">
+          <TituloLetras lineas={["Cobranzas"]} />
+          <p className="sn-p-sub">Quién te debe y a quién le cobraste</p>
+          {rep && (
+            <div className="sn-kpis">
+              <div className="sn-kpi">
+                <span className="sn-kpi-ic sn-kpi-verde">
+                  <Wallet size={17} />
+                </span>
+                <div>
+                  <b>${money(rep.cobrado_rango)}</b>
+                  <small>cobrado en el rango · {rep.cobros_count} abonos</small>
+                </div>
+              </div>
+              <div className="sn-kpi">
+                <span className="sn-kpi-ic sn-kpi-amarillo">
+                  <CircleDollarSign size={17} />
+                </span>
+                <div>
+                  <b>${money(rep.por_cobrar)}</b>
+                  <small>por cobrar de todas las notas</small>
+                </div>
+              </div>
+              <div className="sn-kpi">
+                <span className={`sn-kpi-ic ${rep.vencido > 0.005 ? "sn-kpi-rojo" : ""}`}>
+                  <AlarmClock size={17} />
+                </span>
+                <div>
+                  <b>${money(rep.vencido)}</b>
+                  <small>vencido · ya pasó la fecha</small>
+                </div>
+              </div>
+              <div className="sn-kpi">
+                <span className="sn-kpi-ic">
+                  <Users size={17} />
+                </span>
+                <div>
+                  <b>{rep.clientes_deben}</b>
+                  <small>clientes con saldo abierto</small>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <Encabezado titulo="Cobranzas">Quien te debe y a quien le cobraste</Encabezado>
+      )}
 
       <Barra>
         <ToolbarButton
@@ -274,6 +324,7 @@ export default function CobranzasPage() {
 
       {rep && (
         <div className={cuenta ? "print:hidden" : ""}>
+          {!din && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <Tarjeta
               label="Cobrado en el rango"
@@ -306,9 +357,10 @@ export default function CobranzasPage() {
               acento="bg-brand-50 text-brand-700"
             />
           </div>
+          )}
 
           {rep.cobros_por_dia.length > 0 && (
-            <div className="mb-4 p-4 rounded-xl bg-white border border-gray-200 shadow-card">
+            <div className="sn-cb-grafico mb-4 p-4 rounded-xl bg-white border border-gray-200 shadow-card">
               <p className="text-xs text-gray-500 mb-3">Cobros por dia</p>
               <div className="flex items-end gap-1 h-24">
                 {rep.cobros_por_dia.map((d) => (
@@ -329,7 +381,60 @@ export default function CobranzasPage() {
             </div>
           )}
 
-          {tab === "deben" && (
+          {/* Dinamic: cada cliente que debe es una ficha del color de su atraso; al tocarla abre su estado de cuenta */}
+          {tab === "deben" && din && (
+            <div className="sn-cb-deben">
+              <p className="sn-cb-titulo">
+                Quién me debe{" "}
+                <span>
+                  ({deudores.length}
+                  {soloVencidos && " con algo vencido"})
+                </span>
+              </p>
+              {deudores.length === 0 && (
+                <EmptyState icon={HandCoins} title={soloVencidos ? "Nada vencido" : "Nadie te debe"}>
+                  {soloVencidos ? "Todos los saldos estan dentro de su plazo." : "No hay saldos pendientes."}
+                </EmptyState>
+              )}
+              <div className="sn-cb-fichas">
+                {deudores.map((d, i) => {
+                  const pct = d.total > 0 ? Math.min(100, (d.abonado / d.total) * 100) : 0;
+                  const k = d.dias_mas_viejo > 0 ? "vencida" : d.abonado > 0.005 ? "abonada" : "pendiente";
+                  return (
+                    <button
+                      key={d.display_name + i}
+                      type="button"
+                      onClick={() => verCuenta(d.client_id)}
+                      title="Ver su estado de cuenta"
+                      className={`sn-t-ficha sn-e-${k}`}
+                      style={{ animationDelay: `${Math.min(i, 12) * 35}ms` }}
+                    >
+                      <span className="sn-t-sup">
+                        {d.dias_mas_viejo > 0
+                          ? `Lo más viejo venció hace ${d.dias_mas_viejo} día${d.dias_mas_viejo === 1 ? "" : "s"}`
+                          : "Al día · dentro del plazo"}
+                      </span>
+                      <span className="sn-t-nom">{d.display_name}</span>
+                      <span className="sn-t-sub">
+                        {d.notas} nota{d.notas === 1 ? "" : "s"} · abonado ${money(d.abonado)} de ${money(d.total)}
+                      </span>
+                      <span className="sn-t-barra">
+                        <span style={{ width: `${pct}%` }} />
+                      </span>
+                      <span className="sn-t-pie">
+                        <span className="sn-t-monto">${money(d.pendiente)}</span>
+                        <span className="sn-t-av" style={{ background: colorDe(d.display_name) }}>
+                          {iniciales(d.display_name)}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {tab === "deben" && !din && (
             <div className="bg-white border border-gray-200 rounded-xl shadow-card overflow-hidden">
               <div className="px-4 pt-3 pb-2 text-[13px] font-medium text-gray-800">
                 Quien me debe{" "}
@@ -383,7 +488,7 @@ export default function CobranzasPage() {
           )}
 
           {tab === "cobros" && (
-            <div className="bg-white border border-gray-200 rounded-xl shadow-card overflow-hidden">
+            <div className="sn-cb-lista bg-white border border-gray-200 rounded-xl shadow-card overflow-hidden">
               <div className="px-4 pt-3 pb-2 text-[13px] font-medium text-gray-800">
                 Lo que cobraste <span className="text-gray-400 font-normal">({rep.cobros.length})</span>
               </div>
