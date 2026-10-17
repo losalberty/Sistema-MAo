@@ -2255,6 +2255,235 @@ html.dinamic.dark {
     height: 6px;
   }
 
+  /* ================= PANEL (app/page.tsx) ================= */
+  .dinamic .sn-pa-sub {
+    margin-top: 8px;
+    font-size: 14px;
+  }
+  html.dinamic .sn-pa-periodos {
+    padding: 3px;
+    border-radius: 999px;
+    background-color: var(--d-card);
+    box-shadow: var(--d-sh-card);
+  }
+  html.dinamic .sn-pa-periodos > button {
+    height: 30px;
+    padding: 0 13px;
+    border-radius: 999px;
+  }
+  html.dinamic .sn-pa-periodos > button.bg-white {
+    background-color: var(--d-t900);
+    color: var(--d-bg);
+    box-shadow: none;
+  }
+  html.dinamic .sn-pa-accesos > button {
+    padding: 8px 14px 8px 8px;
+    border-color: transparent;
+    border-radius: 999px;
+    box-shadow: var(--d-sh-card);
+  }
+  html.dinamic .sn-pa-accesos > button > span:first-child {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+  }
+  html.dinamic .sn-pa .rounded-xl.bg-white {
+    border-color: transparent;
+    border-radius: 26px;
+  }
+  .dinamic .sn-pa h3 {
+    font-family: var(--d-titulos);
+    font-size: 17px;
+    font-weight: 750;
+    letter-spacing: -0.01em;
+  }
+  html.dinamic .sn-pa-cobrar {
+    margin: 6px 12px;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 18px;
+    background-color: var(--d-g50);
+    transition: background-color 0.2s, box-shadow 0.2s;
+  }
+  html.dinamic .sn-pa-cobrar:hover {
+    background-color: var(--d-card);
+    box-shadow: var(--d-sh-card);
+  }
+  html.dinamic .sn-pa-cobrar button {
+    border-radius: 999px;
+  }
+  html.dinamic .sn-pa-cobrar > span:first-child {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* ================= COBRANZAS (app/cobranzas) ================= */
+  .dinamic .sn-cb-titulo {
+    margin: 4px 2px 12px;
+    font-family: var(--d-titulos);
+    font-size: 18px;
+    font-weight: 750;
+    color: var(--d-t900);
+  }
+  .dinamic .sn-cb-titulo span {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--d-t400);
+  }
+  .dinamic .sn-cb-fichas {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 12px;
+  }
+  html.dinamic .sn-cb-grafico,
+  html.dinamic .sn-cb-lista {
+    border-color: transparent;
+    border-radius: 26px;
+  }
+  html.dinamic .sn-cb-grafico .rounded-t {
+    border-radius: 8px 8px 3px 3px;
+  }
+
+  /* ================= CLIENTES (app/clientes) ================= */
+  html.dinamic .sn-cl-caja {
+    border-color: transparent;
+    border-radius: 26px;
+  }
+  html.dinamic .sn-cl-busca {
+    padding: 14px;
+    border-bottom-color: transparent;
+  }
+  html.dinamic .sn-cl-busca input {
+    height: 38px;
+    border-radius: 999px;
+    background-color: var(--d-g50);
+  }
+  html.dinamic .sn-cl-grid {
+    gap: 14px;
+    padding: 4px 14px 14px;
+    background-color: transparent;
+  }
+  html.dinamic .sn-cl-tarjeta {
+    padding: 18px;
+    border-color: transparent;
+    border-top: 5px solid var(--d-es);
+    border-radius: 22px;
+    background-color: var(--d-g50);
+    box-shadow: none;
+  }
+  html.dinamic .sn-cl-tarjeta:hover {
+    background-color: var(--d-card);
+    box-shadow: var(--d-sh-pop);
+  }
+  html.dinamic .sn-cl-debe {
+    border-top-color: var(--d-amarillo);
+  }
+  html.dinamic .sn-cl-vencido {
+    border-top-color: var(--d-rs);
+  }
+  html.dinamic .sn-cl-av {
+    width: 48px;
+    height: 48px;
+    font-size: 15px;
+  }
+  .dinamic .sn-cl-nom {
+    font-family: var(--d-titulos);
+    font-size: 16px;
+    font-weight: 750;
+  }
+  html.dinamic .sn-cl-tarjeta .border-t {
+    border-top-color: var(--d-b100);
+  }
+  html.dinamic .sn-cl-fila {
+    height: 48px;
+    margin: 0 8px;
+    border-radius: 14px;
+    border-bottom-color: transparent;
+  }
+  html.dinamic .sn-cl-fila.bg-gray-50\/40 {
+    background-color: transparent;
+  }
+  html.dinamic .sn-cl-pie {
+    padding: 12px 18px;
+    background-color: transparent;
+  }
+
+  /* ================= COMPRAS (app/compras) ================= */
+  html.dinamic .sn-cp-caja,
+  html.dinamic .sn-cp-form {
+    border-color: transparent;
+    border-radius: 26px;
+  }
+  html.dinamic .sn-cp-provs {
+    border-right-color: var(--d-b100);
+    background-color: transparent;
+  }
+  html.dinamic .sn-cp-provs input {
+    border-radius: 999px;
+  }
+  html.dinamic .sn-cp-prov {
+    padding: 10px 12px;
+    margin-bottom: 4px;
+    border-radius: 16px;
+  }
+  html.dinamic .sn-cp-prov-on {
+    background-color: var(--d-t900);
+    box-shadow: none;
+    --tw-ring-color: transparent;
+  }
+  html.dinamic .sn-cp-prov-on span {
+    color: color-mix(in srgb, var(--d-bg) 85%, transparent);
+  }
+  html.dinamic .sn-cp-prov-on span:first-child {
+    color: var(--d-bg);
+  }
+  html.dinamic .sn-cp-cab {
+    padding: 22px 24px 16px;
+    border-bottom-color: transparent;
+  }
+  .dinamic .sn-cp-nombre {
+    font-family: var(--d-titulos);
+    font-size: 24px;
+    font-weight: 750;
+    letter-spacing: -0.02em;
+  }
+  html.dinamic .sn-cp-cab button.bg-emerald-600 {
+    border-radius: 999px;
+  }
+  html.dinamic .sn-cp-stats > div {
+    padding: 12px 14px;
+    border-radius: 18px;
+  }
+  html.dinamic .sn-cp-stats p:last-child {
+    font-family: var(--d-titulos);
+    font-size: 19px;
+    font-weight: 750;
+  }
+  html.dinamic .sn-cp-filtro {
+    padding: 8px 24px;
+    border-bottom-color: var(--d-b100);
+  }
+  html.dinamic .sn-cp-filtro button {
+    border-radius: 999px;
+    padding: 0 13px;
+  }
+  html.dinamic .sn-cp-filtro button.bg-brand-50 {
+    background-color: var(--d-t900);
+    color: var(--d-bg);
+  }
+  html.dinamic .sn-cp-mov {
+    height: 56px;
+    margin: 0 8px;
+    border-radius: 14px;
+    border-bottom-color: transparent;
+  }
+  html.dinamic .sn-cp-mov > span:nth-child(2) {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+  }
+
   /* ---------------- colores (generados) ---------------- */
 .dinamic .rounded-md{border-radius:10px}
 .dinamic .rounded-lg{border-radius:14px}
