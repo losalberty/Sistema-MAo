@@ -20,6 +20,10 @@
   unicode-range: U+0030-0039;
 }
 
+/* OJO: las animaciones de entrada usan "backwards" y no "both". Con "both", Chrome deja
+   el contenido como si siguiera movido, y las ventanas fijas (la ficha de una nota,
+   los avisos) se acomodan contra la pagina y no contra la pantalla: quedan abajo. */
+
 /* al cambiar de tema todo cambia de golpe, sin transiciones a medias */
 .sn-cambiando *,
 .sn-cambiando *::before,
@@ -209,7 +213,7 @@ html.dinamic.dark {
     line-height: 1.08;
     font-weight: 750;
     letter-spacing: -0.035em;
-    animation: sn-titulo 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation: sn-titulo 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
   }
   .dinamic h2,
   .dinamic .sn-tarjeta > p:nth-child(2),
@@ -473,7 +477,7 @@ html.dinamic.dark {
 
   /* ---------------- cada pantalla entra suave ---------------- */
   .dinamic .sn-contenido > * {
-    animation: sn-entrar 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation: sn-entrar 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
   }
   /* lo que se pega arriba al bajar queda justo debajo del menu de pastillas (58px) */
   .dinamic .top-\[52px\] {
@@ -639,7 +643,7 @@ html.dinamic.dark {
     color: var(--d-on-amarillo);
   }
   .dinamic .sn-d-pop {
-    animation: sn-desplegar 0.22s cubic-bezier(0.2, 1, 0.4, 1) both;
+    animation: sn-desplegar 0.22s cubic-bezier(0.2, 1, 0.4, 1) backwards;
   }
   html.dinamic .sn-d-pop .sn-tasas {
     margin: 0;
@@ -688,7 +692,7 @@ html.dinamic.dark {
     color: var(--d-t500);
     white-space: nowrap;
     flex-shrink: 0;
-    transition: color 0.25s;
+    transition: color 0.12s;
   }
   .dinamic .sn-d-pildora:hover {
     color: var(--d-t900);
@@ -696,6 +700,7 @@ html.dinamic.dark {
   .dinamic .sn-d-pildora-on,
   .dinamic .sn-d-pildora-on:hover {
     color: var(--d-bg);
+    transition: color 0.16s 0.14s;
   }
   .dinamic .sn-d-indicador {
     position: absolute;
@@ -706,7 +711,7 @@ html.dinamic.dark {
     border-radius: 999px;
     background: var(--d-t900);
     box-shadow: var(--d-sh-btn);
-    transition: transform 0.45s cubic-bezier(0.3, 1.3, 0.5, 1), width 0.45s cubic-bezier(0.3, 1.3, 0.5, 1);
+    transition: transform 0.32s cubic-bezier(0.3, 1.15, 0.5, 1), width 0.32s cubic-bezier(0.3, 1.15, 0.5, 1);
   }
   .dinamic .sn-d-cuenta {
     min-width: 18px;
@@ -771,7 +776,7 @@ html.dinamic.dark {
     border-radius: 28px;
     background: #151515;
     box-shadow: 0 20px 40px -18px rgba(0, 0, 0, 0.55);
-    animation: sn-dock 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+    animation: sn-dock 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.1) backwards;
   }
   .dinamic.dark .sn-d-dock {
     background: #0a0a09;
@@ -930,7 +935,7 @@ html.dinamic.dark {
     background-color: var(--d-velo);
     -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
-    animation: sn-aparecer 0.22s ease-out both;
+    animation: sn-aparecer 0.22s ease-out backwards;
   }
   html.dinamic .sn-velo.opacity-0 {
     animation: none;
@@ -939,7 +944,7 @@ html.dinamic.dark {
     border-color: transparent;
     border-radius: 28px;
     box-shadow: var(--d-sh-pop);
-    animation: sn-ventana 0.34s cubic-bezier(0.2, 1.15, 0.4, 1) both;
+    animation: sn-ventana 0.34s cubic-bezier(0.2, 1.15, 0.4, 1) backwards;
   }
   html.dinamic .sn-lateral {
     border-color: transparent;
@@ -951,7 +956,7 @@ html.dinamic.dark {
   html.dinamic .sn-flotante {
     border-color: transparent;
     border-radius: 22px;
-    animation: sn-desplegar 0.22s cubic-bezier(0.2, 1, 0.4, 1) both;
+    animation: sn-desplegar 0.22s cubic-bezier(0.2, 1, 0.4, 1) backwards;
   }
 
   /* ---------------- avisos (abajo a la derecha) ---------------- */
@@ -1072,7 +1077,7 @@ html.dinamic.dark {
     background: #151515;
     color: #fff;
     box-shadow: var(--d-sh-card);
-    animation: sn-entrar 0.45s 0.15s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation: sn-entrar 0.45s 0.15s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
   }
   .dinamic.dark .sn-b-pendiente {
     background: #2c2d29;
@@ -1172,7 +1177,7 @@ html.dinamic.dark {
     border-color: transparent;
     border-radius: 22px;
     box-shadow: var(--d-sh-pop);
-    animation: sn-desplegar 0.22s cubic-bezier(0.2, 1, 0.4, 1) both;
+    animation: sn-desplegar 0.22s cubic-bezier(0.2, 1, 0.4, 1) backwards;
   }
   html.dinamic .sn-desp > button {
     padding: 10px 12px;
@@ -1355,7 +1360,7 @@ html.dinamic.dark {
     border: 1px solid var(--d-b100);
     border-radius: 20px;
     background-color: var(--d-g50);
-    animation: sn-entrar 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation: sn-entrar 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
     transition: background-color 0.2s, box-shadow 0.2s;
   }
   html.dinamic .sn-linea:hover {
@@ -1815,7 +1820,7 @@ html.dinamic.dark {
     border-radius: 18px;
     text-align: left;
     box-shadow: 0 10px 22px -16px rgba(0, 0, 0, 0.45);
-    animation: sn-entrar 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation: sn-entrar 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
     transition: transform 0.25s cubic-bezier(0.3, 1.4, 0.5, 1), box-shadow 0.25s;
   }
   .dinamic .sn-t-ficha:hover {
@@ -1938,7 +1943,7 @@ html.dinamic.dark {
     box-shadow: var(--d-sh-pop);
   }
   html.dinamic .sn-ficha-sola {
-    animation: sn-ventana 0.34s cubic-bezier(0.2, 1.15, 0.4, 1) both;
+    animation: sn-ventana 0.34s cubic-bezier(0.2, 1.15, 0.4, 1) backwards;
   }
   html.dinamic .sn-f-cab {
     --d-card: rgba(255, 255, 255, 0.1);
