@@ -41,6 +41,7 @@ import {
   inputCls,
 } from "@/components/Ventana";
 import { colorDe, iniciales } from "@/components/Paleta";
+import { TituloLetras, useEstilo } from "@/components/Estilo";
 
 type ClientRow = {
   id: string;
@@ -139,6 +140,8 @@ export default function ClientesPage() {
 
 function Clientes() {
   const router = useRouter();
+  // tema Dinamic: titulo grande, numeros con circulo y tarjetas redondas (el Clasico no cambia)
+  const din = useEstilo() === "dinamic";
   const params = useSearchParams();
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [search, setSearch] = useState("");
@@ -288,7 +291,43 @@ function Clientes() {
   }
 
   return (
-    <main className="p-6 max-w-[1180px]">
+    <main className="sn-cl p-6 max-w-[1180px]">
+      {din && (
+        <div className="sn-p-cabeza print:hidden">
+          <TituloLetras lineas={["Clientes"]} />
+          <p className="sn-p-sub">Toca un cliente para ver su ficha, su deuda y sus notas.</p>
+          <div className="sn-kpis">
+            <button type="button" className={`sn-kpi ${filtro === "todos" ? "sn-kpi-on" : ""}`} onClick={() => setFiltro("todos")}>
+              <span className="sn-kpi-ic">
+                <Users size={17} />
+              </span>
+              <div>
+                <b>{clients.length}</b>
+                <small>clientes</small>
+              </div>
+            </button>
+            <button type="button" className={`sn-kpi ${filtro === "saldo" ? "sn-kpi-on" : ""}`} onClick={() => setFiltro("saldo")}>
+              <span className="sn-kpi-ic sn-kpi-amarillo">
+                <FileText size={17} />
+              </span>
+              <div>
+                <b>{money(totales.saldo)}</b>
+                <small>por cobrar · {totales.conSaldo} clientes</small>
+              </div>
+            </button>
+            <button type="button" className={`sn-kpi ${filtro === "vencidos" ? "sn-kpi-on" : ""}`} onClick={() => setFiltro("vencidos")}>
+              <span className={`sn-kpi-ic ${totales.vencido > 0.005 ? "sn-kpi-rojo" : ""}`}>
+                <Phone size={17} />
+              </span>
+              <div>
+                <b>{money(totales.vencido)}</b>
+                <small>vencido · {totales.conVencido} clientes para llamar</small>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+      {!din && (
       <Encabezado titulo="Clientes">
         {clients.length} clientes
         {totales.saldo > 0.005 && (
@@ -304,6 +343,7 @@ function Clientes() {
           </>
         )}
       </Encabezado>
+      )}
 
       <Barra>
         <ToolbarButton icon={UserPlus} label="nuevo cliente" tone="brand" onClick={() => setForm({ cliente: null })} />
@@ -353,11 +393,11 @@ function Clientes() {
       )}
 
       <div
-        className={`bg-white border border-gray-200 rounded-xl shadow-card overflow-hidden print:border-0 print:shadow-none ${
+        className={`sn-cl-caja bg-white border border-gray-200 rounded-xl shadow-card overflow-hidden print:border-0 print:shadow-none ${
           fichaId ? "print:hidden" : ""
         }`}
       >
-        <div className="flex items-center gap-2 p-2.5 border-b border-gray-100 print:hidden">
+        <div className="sn-cl-busca flex items-center gap-2 p-2.5 border-b border-gray-100 print:hidden">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -401,7 +441,7 @@ function Clientes() {
         )}
 
         {vista === "tarjetas" && lista.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 p-3 bg-gray-50/40">
+          <div className="sn-cl-grid grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 p-3 bg-gray-50/40">
             {lista.slice(0, visibles).map((c) => {
               const saldo = Number(c.balance_due) || 0;
               const venc = Number(c.overdue) || 0;
@@ -413,19 +453,19 @@ function Clientes() {
                     setMarcado(c.id);
                     setFichaId(c.id);
                   }}
-                  className={`group relative rounded-xl border bg-white p-4 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-pop ${
+                  className={`sn-cl-tarjeta ${venc > 0.005 ? "sn-cl-vencido" : saldo > 0.005 ? "sn-cl-debe" : "sn-cl-aldia"} group relative rounded-xl border bg-white p-4 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-pop ${
                     on ? "border-brand-300 ring-1 ring-brand-200" : "border-gray-200 shadow-card"
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     <span
-                      className="w-10 h-10 rounded-full text-white text-[13px] font-semibold flex items-center justify-center shrink-0"
+                      className="sn-cl-av w-10 h-10 rounded-full text-white text-[13px] font-semibold flex items-center justify-center shrink-0"
                       style={{ background: colorDe(c.name) }}
                     >
                       {iniciales(c.name)}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-gray-900 truncate">{c.name}</p>
+                      <p className="sn-cl-nom text-[14px] font-semibold text-gray-900 truncate">{c.name}</p>
                       <p className="text-[12px] text-gray-500 truncate">
                         {[c.city, c.phone].filter(Boolean).join(" · ") || "sin datos de contacto"}
                       </p>
@@ -489,7 +529,7 @@ function Clientes() {
               key={c.id}
               onClick={() => setMarcado(on ? null : c.id)}
               onDoubleClick={() => setFichaId(c.id)}
-              className={`group flex gap-3 items-center px-3 h-10 border-b border-gray-100 text-[12.5px] cursor-default ${
+              className={`sn-cl-fila group flex gap-3 items-center px-3 h-10 border-b border-gray-100 text-[12.5px] cursor-default ${
                 on ? "bg-brand-50/70" : idx % 2 ? "bg-gray-50/40 hover:bg-gray-50" : "hover:bg-gray-50"
               }`}
             >
@@ -542,7 +582,7 @@ function Clientes() {
           </div>
         )}
 
-        <div className="flex items-center gap-3 px-3 py-2 bg-gray-50 text-[11.5px] print:hidden">
+        <div className="sn-cl-pie flex items-center gap-3 px-3 py-2 bg-gray-50 text-[11.5px] print:hidden">
           <span className="text-gray-400">toca una fila para marcarla · doble clic abre la ficha</span>
           <span className="ml-auto text-gray-500">
             por cobrar <b className="font-medium text-amber-700">{money(totales.saldo)}</b>
