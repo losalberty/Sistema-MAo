@@ -1012,6 +1012,570 @@ html.dinamic.dark {
     background: var(--d-grafica) !important;
   }
 
+  /* ================= NUEVA NOTA Y EDITAR NOTA (app/notas/nueva) ================= */
+  /* titulo grande, letra por letra */
+  .dinamic .sn-contenido h1.sn-letras {
+    animation: none;
+    font-size: 44px;
+    line-height: 1.02;
+    font-weight: 750;
+    letter-spacing: -0.04em;
+    color: var(--d-t900);
+  }
+  .dinamic .sn-letras-linea {
+    display: block;
+  }
+  .dinamic .sn-letras-linea > span {
+    display: inline-block;
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(6px);
+    animation: sn-letra 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  }
+  .dinamic .sn-n-cabeza {
+    margin-bottom: 18px;
+  }
+  .dinamic .sn-n-volver {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 12px;
+    padding: 5px 13px 5px 10px;
+    border-radius: 999px;
+    background: var(--d-card);
+    box-shadow: var(--d-sh-card);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--d-t500);
+    transition: color 0.2s, transform 0.2s;
+  }
+  .dinamic .sn-n-volver:hover {
+    color: var(--d-t900);
+    transform: translateX(-2px);
+  }
+  .dinamic .sn-n-sub {
+    margin-top: 8px;
+    font-size: 14px;
+    color: var(--d-t500);
+  }
+  .dinamic .sn-n-sub::first-letter {
+    text-transform: uppercase;
+  }
+  /* franja de color al editar una nota: del color de su estado */
+  .dinamic .sn-n-banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 16px;
+    padding: 14px 18px;
+    border-radius: 22px;
+    background: #151515;
+    color: #fff;
+    box-shadow: var(--d-sh-card);
+    animation: sn-entrar 0.45s 0.15s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .dinamic.dark .sn-b-pendiente {
+    background: #2c2d29;
+  }
+  .dinamic .sn-b-vencida {
+    background: var(--d-rs);
+  }
+  .dinamic .sn-b-abonada {
+    background: var(--d-amarillo);
+    color: var(--d-on-amarillo);
+  }
+  .dinamic .sn-b-cobrada {
+    background: var(--d-es);
+  }
+  .dinamic .sn-b-anulada {
+    background: var(--d-g300);
+    color: var(--d-t800);
+  }
+  .dinamic .sn-n-banner-ic {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .dinamic .sn-b-abonada .sn-n-banner-ic {
+    background: rgba(0, 0, 0, 0.08);
+  }
+  .dinamic .sn-n-banner-t {
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .dinamic .sn-n-banner-s {
+    font-size: 13px;
+    opacity: 0.85;
+  }
+  .dinamic .sn-n-banner-e {
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  /* tarjetas de cliente y repuestos */
+  html.dinamic .sn-n-tarjeta {
+    border-color: transparent;
+    border-radius: 26px;
+    padding: 20px;
+  }
+  html.dinamic .sn-n-repuestos {
+    padding: 0;
+  }
+  .dinamic .sn-n-titulo {
+    font-family: var(--d-titulos);
+    font-size: 17px;
+    font-weight: 750;
+    letter-spacing: -0.01em;
+    color: var(--d-t900);
+  }
+  /* buscadores en pastilla */
+  html.dinamic #buscar-cliente,
+  html.dinamic #buscador {
+    height: 46px;
+    border-radius: 999px;
+    padding-left: 42px;
+    font-size: 15px;
+    background-color: var(--d-g50);
+    border-color: var(--d-b200);
+  }
+  html.dinamic #buscar-cliente + * {
+    top: 54px;
+  }
+  .dinamic .sn-n-repuestos > .relative > svg:first-child {
+    top: 15px;
+    left: 32px;
+  }
+  .dinamic .sn-n-tarjeta .relative > svg:first-child {
+    left: 16px;
+  }
+  html.dinamic .sn-n-rapido input {
+    height: 40px;
+    border-radius: 999px;
+    padding: 0 16px;
+  }
+  html.dinamic .sn-n-rapido button,
+  html.dinamic .sn-n-acc {
+    height: 38px;
+    border-radius: 999px;
+    padding: 0 15px;
+    font-weight: 600;
+  }
+  /* listas que se despliegan */
+  html.dinamic .sn-desp {
+    padding: 6px;
+    border-color: transparent;
+    border-radius: 22px;
+    box-shadow: var(--d-sh-pop);
+    animation: sn-desplegar 0.22s cubic-bezier(0.2, 1, 0.4, 1) both;
+  }
+  html.dinamic .sn-desp > button {
+    padding: 10px 12px;
+    border-radius: 16px;
+  }
+  html.dinamic .sn-n-repuestos .sn-desp {
+    top: 56px;
+  }
+  /* pastillas de existencia */
+  html.dinamic .sn-pill {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+
+  /* cliente elegido: ficha grande */
+  .dinamic .sn-n-cli {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 6px;
+  }
+  .dinamic .sn-n-cli-av {
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 18px;
+    font-weight: 700;
+    box-shadow: 0 10px 20px -12px rgba(0, 0, 0, 0.5);
+  }
+  .dinamic .sn-n-cli-nom {
+    font-family: var(--d-titulos);
+    font-size: 19px;
+    font-weight: 750;
+    letter-spacing: -0.01em;
+    color: var(--d-t900);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dinamic .sn-n-cli-dato {
+    font-size: 13px;
+    color: var(--d-t500);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dinamic .sn-n-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 7px;
+  }
+  .dinamic .sn-chip {
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--d-g100);
+    color: var(--d-t700);
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  .dinamic .sn-chip-roja {
+    background: var(--d-r50);
+    color: var(--d-rt);
+  }
+  .dinamic .sn-chip-ambar {
+    background: var(--d-a50);
+    color: var(--d-at);
+  }
+  .dinamic .sn-chip-verde {
+    background: var(--d-e50);
+    color: var(--d-et);
+  }
+  .dinamic .sn-n-wa,
+  .dinamic .sn-n-mini {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s cubic-bezier(0.3, 1.4, 0.5, 1), background-color 0.2s, color 0.2s;
+  }
+  .dinamic .sn-n-wa {
+    background: #25d366;
+    color: #fff;
+  }
+  .dinamic .sn-n-mini {
+    background: var(--d-g100);
+    color: var(--d-t600);
+  }
+  .dinamic .sn-n-wa:hover,
+  .dinamic .sn-n-mini:hover {
+    transform: translateY(-2px);
+  }
+  .dinamic .sn-n-mini:hover {
+    color: var(--d-t900);
+  }
+  .dinamic .sn-n-boton {
+    height: 38px;
+    flex-shrink: 0;
+    padding: 0 16px;
+    border-radius: 999px;
+    border: 1px solid var(--d-b300);
+    background: var(--d-card);
+    color: var(--d-t800);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .dinamic .sn-n-boton:hover {
+    border-color: var(--d-t900);
+    color: var(--d-t900);
+  }
+  .dinamic .sn-n-deuda {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 14px;
+    padding: 10px 14px;
+    border-radius: 16px;
+    background: var(--d-a50);
+    color: var(--d-at);
+    font-size: 13px;
+  }
+  .dinamic .sn-n-deuda-roja {
+    background: var(--d-r50);
+    color: var(--d-rt);
+  }
+  .dinamic .sn-n-deuda b {
+    font-weight: 700;
+  }
+
+  /* repuestos: cabecera y botones */
+  .dinamic .sn-n-cabrep {
+    padding: 20px 20px 12px;
+  }
+  html.dinamic .sn-n-grupo {
+    padding: 3px;
+    border-color: transparent;
+    border-radius: 999px;
+    background: var(--d-g100);
+  }
+  html.dinamic .sn-n-grupo > button {
+    height: 32px;
+    padding: 0 13px;
+    border-radius: 999px;
+    color: var(--d-t800);
+    font-weight: 600;
+  }
+  html.dinamic .sn-n-grupo > button:hover {
+    background: var(--d-card);
+  }
+  .dinamic .sn-n-grupo > span {
+    display: none;
+  }
+
+  /* lineas: cada repuesto es una tarjeta redonda */
+  html.dinamic .sn-n-lineas {
+    border-top-color: transparent;
+    padding: 0 14px 10px;
+  }
+  .dinamic .sn-n-cab {
+    display: none;
+  }
+  html.dinamic .sn-n-vacio > span:first-child {
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+  }
+  html.dinamic .sn-linea {
+    margin-top: 9px;
+    padding: 12px 14px;
+    border: 1px solid var(--d-b100);
+    border-radius: 20px;
+    background-color: var(--d-g50);
+    animation: sn-entrar 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    transition: background-color 0.2s, box-shadow 0.2s;
+  }
+  html.dinamic .sn-linea:hover {
+    background-color: var(--d-card);
+    box-shadow: var(--d-sh-card);
+  }
+  /* si la pantalla no es muy ancha, cada linea va en dos renglones:
+     arriba codigo y descripcion, abajo cantidad, precio y total */
+  @media (max-width: 1700px) {
+    html.dinamic .sn-linea {
+      flex-wrap: wrap;
+      row-gap: 8px;
+    }
+    html.dinamic .sn-linea > div:nth-child(2) {
+      flex: 1 1 calc(100% - 124px);
+    }
+    html.dinamic .sn-linea > div:nth-child(3) {
+      margin-left: 124px;
+      justify-content: flex-start;
+    }
+    html.dinamic .sn-linea > div:nth-child(5) {
+      margin-left: auto;
+    }
+  }
+  html.dinamic .sn-linea.sn-flash {
+    animation: sn-flash 1.4s ease-out;
+  }
+  html.dinamic .sn-l-cod {
+    border-color: transparent;
+    border-radius: 10px;
+    background-color: var(--d-g100);
+    color: var(--d-t700);
+    text-align: center;
+    font-size: 12px;
+  }
+  html.dinamic .sn-l-cod.border-amber-300 {
+    background-color: var(--d-a50);
+  }
+  html.dinamic .sn-l-desc,
+  html.dinamic .sn-l-precio {
+    border-color: transparent;
+    background-color: transparent;
+  }
+  html.dinamic .sn-l-desc {
+    padding-left: 4px;
+    font-size: 14px;
+    font-weight: 650;
+  }
+  html.dinamic .sn-l-desc:hover,
+  html.dinamic .sn-l-desc:focus,
+  html.dinamic .sn-l-precio:hover,
+  html.dinamic .sn-l-precio:focus {
+    border-color: var(--d-b300);
+    background-color: var(--d-card);
+  }
+  html.dinamic .sn-paso {
+    height: 34px;
+    padding: 2px;
+    border-color: transparent;
+    border-radius: 999px;
+    background-color: var(--d-g100);
+  }
+  html.dinamic .sn-paso button {
+    width: 30px;
+    border-radius: 999px;
+  }
+  html.dinamic .sn-paso button:hover {
+    background-color: var(--d-card);
+  }
+  html.dinamic .sn-paso input {
+    font-size: 14px;
+    font-weight: 700;
+    background: transparent;
+  }
+  html.dinamic .sn-l-tarifas button {
+    border-radius: 999px;
+    padding-left: 7px;
+    padding-right: 7px;
+  }
+  .dinamic .sn-l-total {
+    font-size: 15.5px;
+    font-weight: 750;
+  }
+  html.dinamic .sn-l-quitar {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+  }
+  html.dinamic .sn-l-nota {
+    padding: 3px 10px;
+    border-radius: 999px;
+    background-color: var(--d-g100);
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  .dinamic .sn-l-nueva {
+    padding: 14px 4px 6px;
+  }
+  html.dinamic .sn-l-nuevo {
+    width: 300px;
+    height: 40px;
+    padding: 0 16px;
+    border-radius: 999px;
+    border-color: var(--d-b300);
+    background-color: transparent;
+  }
+
+  /* cuadro negro: total grande arriba, cobro y vencimiento adentro */
+  .dinamic .sn-r-total {
+    margin-bottom: 16px;
+  }
+  .dinamic .sn-r-et {
+    display: flex;
+    align-items: center;
+    font-size: 13.5px;
+  }
+  .dinamic .sn-r-et > span:first-child {
+    opacity: 0.72;
+  }
+  .dinamic .sn-r-num {
+    margin-left: auto;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(140, 195, 174, 0.22);
+    color: #bfe3d3;
+    font-size: 11.5px;
+    font-weight: 700;
+  }
+  .dinamic .sn-r-monto {
+    margin-top: 4px;
+    font-family: var(--d-titulos);
+    font-size: 44px;
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.04em;
+    color: #fff;
+    overflow-wrap: anywhere;
+  }
+  .dinamic .sn-r-anulada {
+    text-decoration: line-through;
+    opacity: 0.45;
+  }
+  .dinamic .sn-r-sub {
+    margin-top: 2px;
+    font-size: 13px;
+    opacity: 0.65;
+  }
+  .dinamic .sn-r-cobro {
+    margin: 6px 0 4px;
+  }
+  .dinamic .sn-r-lab {
+    margin: 14px 0 6px;
+    font-size: 12.5px;
+    color: rgba(255, 255, 255, 0.62);
+  }
+  .dinamic .sn-r-lab-f {
+    color: #fff;
+  }
+  .dinamic .sn-r-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .dinamic .sn-r-chip {
+    height: 30px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 13px;
+  }
+  .dinamic .sn-r-chip:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+  .dinamic .sn-r-chip-on,
+  .dinamic .sn-r-chip-on:hover {
+    background: var(--d-amarillo);
+    color: var(--d-on-amarillo);
+    font-weight: 700;
+  }
+  .dinamic .sn-r-chip-roja,
+  .dinamic .sn-r-chip-roja:hover {
+    background: #c9503b;
+    color: #fff;
+    font-weight: 700;
+  }
+  html.dinamic .sn-r-fecha {
+    height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 999px;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 12.5px;
+    color-scheme: dark;
+  }
+
+  /* ventana "No alcanza para todo": cada opcion es una tarjeta */
+  html.dinamic .sn-falta {
+    padding: 4px 6px 8px;
+    border-color: transparent;
+    border-radius: 20px;
+    background-color: var(--d-g50);
+  }
+  html.dinamic .sn-falta > div:first-child {
+    background-color: transparent;
+  }
+  html.dinamic .sn-opcion {
+    margin: 6px 4px 0;
+    padding: 10px 12px;
+    border: 2px solid var(--d-b200);
+    border-radius: 16px;
+    background-color: var(--d-card);
+    transition: border-color 0.2s;
+  }
+  html.dinamic .sn-opcion:has(input:checked) {
+    border-color: var(--d-t900);
+  }
+
   /* ---------------- colores (generados) ---------------- */
 .dinamic .rounded-md{border-radius:10px}
 .dinamic .rounded-lg{border-radius:14px}
@@ -1240,6 +1804,23 @@ html.dinamic.dark {
     transform: translate(0, -50%);
   }
 }
+@keyframes sn-letra {
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+@keyframes sn-flash {
+  0%,
+  100% {
+    box-shadow: none;
+  }
+  25%,
+  60% {
+    box-shadow: 0 0 0 4px var(--d-amarillo);
+  }
+}
 @keyframes sn-desplegar {
   from {
     opacity: 0;
@@ -1258,5 +1839,10 @@ html.dinamic.dark {
   .dinamic *::after {
     animation: none !important;
     transition: none !important;
+  }
+  .dinamic .sn-letras-linea > span {
+    opacity: 1;
+    transform: none;
+    filter: none;
   }
 }
