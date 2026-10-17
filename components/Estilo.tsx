@@ -197,3 +197,21 @@ export function SelectorTema() {
     </section>
   );
 }
+
+/* ---------- titulo grande que aparece letra por letra (solo el tema Dinamic lo usa) ---------- */
+
+export function TituloLetras({ lineas }: { lineas: string[] }) {
+  return (
+    <h1 className="sn-letras" aria-label={lineas.join(" ")}>
+      {lineas.map((linea, li) => (
+        <span key={li} className="sn-letras-linea" aria-hidden="true">
+          {[...linea].map((c, i) => (
+            <span key={i} style={{ animationDelay: `${(li * 9 + i) * 26}ms` }}>
+              {c === " " ? "\u00a0" : c}
+            </span>
+          ))}
+        </span>
+      ))}
+    </h1>
+  );
+}
