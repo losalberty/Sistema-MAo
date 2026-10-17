@@ -259,6 +259,27 @@ export default function AjustesPage() {
         )}
       </section>
 
+      {/* recalcular */}
+      <section className="mb-4 rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3 flex-wrap">
+        <div className="flex-1 min-w-[240px]">
+          <p className="text-[15px] font-semibold text-gray-900">Recalcular el inventario</p>
+          <p className="text-[12.5px] text-gray-500">
+            Vuelve a cuadrar cada repuesto: estante, apartado y lo que se entregó a cada nota. No borra nada.
+          </p>
+        </div>
+        <button
+          onClick={async () => {
+            const { data, error } = await supabase.rpc("recalcular_todo");
+            if (error) return notify.error("No se pudo recalcular", error.message);
+            notify.ok("Inventario recalculado", `${data} repuestos revisados`);
+            cargar();
+          }}
+          className="h-9 px-4 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-700 hover:border-gray-300"
+        >
+          Recalcular ahora
+        </button>
+      </section>
+
       {/* punto de partida */}
       <section className={`mb-4 rounded-xl border border-gray-200 bg-white p-4 ${bloqueado ? "opacity-60" : ""}`}>
         <p className="text-[15px] font-semibold text-gray-900 flex items-center gap-2">
