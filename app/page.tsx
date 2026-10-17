@@ -28,6 +28,7 @@ import { descargarExcel } from "@/components/Ventana";
 import { colorDe, iniciales } from "@/components/Paleta";
 import { sonDeHoy, useTasas } from "@/components/Tasas";
 import { useAlClicFuera } from "@/components/useFuera";
+import { TituloLetras, useEstilo } from "@/components/Estilo";
 
 /* ============================================================
    Panel principal: como va el negocio, de un vistazo
@@ -164,6 +165,8 @@ function useContar(valor: number, ms = 800) {
 
 export default function Panel() {
   const router = useRouter();
+  // tema Dinamic: saludo grande letra por letra y tarjetas redondas (el Clasico no cambia)
+  const din = useEstilo() === "dinamic";
   const tasas = useTasas();
   const [periodo, setPeriodo] = useState<Periodo>("30d");
   const [rango, setRango] = useState(rangoDe("30d"));
@@ -229,7 +232,7 @@ export default function Panel() {
   const revisar = (
     data
       ? [
-          !sonDeHoy(tasas) && { t: "Todavia no pusiste las tasas de hoy", sub: "abajo a la izquierda, en el menu", href: null },
+          !sonDeHoy(tasas) && { t: "Todavia no pusiste las tasas de hoy", sub: din ? "arriba, en la pastilla de las tasas" : "abajo a la izquierda, en el menu", href: null },
           data.productos_sin_costo > 0 && {
             t: `${data.productos_sin_costo} de ${data.productos_total} productos sin costo cargado`,
             sub: "su ganancia sale mal en los informes",
@@ -245,15 +248,19 @@ export default function Panel() {
   ) as { t: string; sub: string; href: string | null }[];
 
   return (
-    <main className="p-6 max-w-[1240px] pb-16">
+    <main className="sn-pa p-6 max-w-[1240px] pb-16">
       {/* ---------- saludo y periodo ---------- */}
       <div className="flex items-end gap-3 flex-wrap">
         <div className="min-w-0">
-          <h1 className="text-[24px] font-semibold text-gray-900 tracking-tight">{saludo}</h1>
-          <p className="text-[13px] text-gray-500 first-letter:uppercase">{hoyLargo} · asi va tu negocio</p>
+          {din ? (
+            <TituloLetras lineas={saludo.split(" ")} />
+          ) : (
+            <h1 className="text-[24px] font-semibold text-gray-900 tracking-tight">{saludo}</h1>
+          )}
+          <p className="sn-pa-sub text-[13px] text-gray-500 first-letter:uppercase">{hoyLargo} · asi va tu negocio</p>
         </div>
         <div className="flex-1" />
-        <div className="inline-flex p-[3px] rounded-[10px] bg-gray-200/60 gap-0.5">
+        <div className="sn-pa-periodos inline-flex p-[3px] rounded-[10px] bg-gray-200/60 gap-0.5">
           {PERIODOS.map((p) => (
             <button
               key={p.k}
@@ -322,7 +329,7 @@ export default function Panel() {
       </div>
 
       {/* ---------- accesos rapidos ---------- */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 mt-5">
+      <div className="sn-pa-accesos grid grid-cols-2 md:grid-cols-5 gap-2.5 mt-5">
         <Acceso icon={FilePlus2} titulo="Nueva nota" sub="tecla N" tono="bg-brand-50 text-brand-700" onClick={() => router.push("/notas/nueva")} />
         <Acceso icon={HandCoins} titulo="Cobrar" sub="quien me debe" tono="bg-emerald-50 text-emerald-700" onClick={() => router.push("/cobranzas")} />
         <Acceso icon={Receipt} titulo="Factura de compra" sub="de un proveedor" tono="bg-orange-50 text-orange-700" onClick={() => router.push("/compras")} />
@@ -339,7 +346,7 @@ export default function Panel() {
       {error && <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>}
 
       {/* ---------- numeros grandes ---------- */}
-      <div className={`grid grid-cols-2 lg:grid-cols-4 gap-3.5 mt-4 transition-opacity ${cargando && data ? "opacity-60" : ""}`}>
+      <div className={`sn-pa-kpis grid grid-cols-2 lg:grid-cols-4 gap-3.5 mt-4 transition-opacity ${cargando && data ? "opacity-60" : ""}`}>
         <Kpi
           label="Ventas"
           icon={TrendingUp}
@@ -398,7 +405,7 @@ export default function Panel() {
               · {etiquetaRango.toLowerCase()} · {data?.mensual ? "por mes" : "por dia"}
             </span>
             <div className="flex-1" />
-            <div className="inline-flex p-[3px] rounded-[9px] bg-gray-100 gap-0.5">
+            <div className="sn-pa-periodos inline-flex p-[3px] rounded-[9px] bg-gray-100 gap-0.5">
               {(["ventas", "ganancia", "cobrado"] as const).map((k) => (
                 <button
                   key={k}
@@ -462,7 +469,7 @@ export default function Panel() {
             </EmptyState>
           )}
           {data?.cobrar_hoy.map((n) => (
-            <div key={n.id} className="flex items-center gap-3 px-4 py-2.5 border-t border-gray-100 hover:bg-gray-50/80">
+            <div key={n.id} className="sn-pa-cobrar flex items-center gap-3 px-4 py-2.5 border-t border-gray-100 hover:bg-gray-50/80">
               <span
                 className="w-8 h-8 rounded-full text-white text-[11px] font-semibold flex items-center justify-center shrink-0"
                 style={{ background: colorDe(n.cliente) }}
