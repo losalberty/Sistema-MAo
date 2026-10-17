@@ -44,13 +44,13 @@ export function Ventana({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-[2px] print:static print:block print:bg-transparent print:p-0 print:backdrop-blur-0"
+      className="sn-velo fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-[2px] print:static print:block print:bg-transparent print:p-0 print:backdrop-blur-0"
       onMouseDown={onClose}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className={`w-full ${ancho} max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-pop border border-gray-200/80 overflow-hidden print:max-h-none print:shadow-none print:border-0 print:rounded-none`}
+        className={`sn-ventana w-full ${ancho} max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-pop border border-gray-200/80 overflow-hidden print:max-h-none print:shadow-none print:border-0 print:rounded-none`}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3 px-5 pt-4 pb-3 border-b border-gray-100">
@@ -141,7 +141,7 @@ export function Encabezado({
   return (
     <div className="flex items-end justify-between gap-4 mb-4 print:hidden">
       <div className="min-w-0">
-        <h1 className="text-[24px] font-semibold text-gray-900 tracking-tight">{titulo}</h1>
+        <h1 className="sn-titulo text-[24px] font-semibold text-gray-900 tracking-tight">{titulo}</h1>
         {children && <p className="text-[13px] text-gray-500">{children}</p>}
       </div>
       {derecha}
@@ -152,7 +152,7 @@ export function Encabezado({
 /* barra de botones de cada seccion: una tira limpia, con los botones en fila */
 export function Barra({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-4 flex items-center gap-1 rounded-xl bg-white border border-gray-200 shadow-card p-1 overflow-x-auto print:hidden">
+    <div className="sn-barra mb-4 flex items-center gap-1 rounded-xl bg-white border border-gray-200 shadow-card p-1 overflow-x-auto print:hidden">
       {children}
     </div>
   );
@@ -214,13 +214,13 @@ export function Lateral({
   return (
     <div ref={raiz} className="fixed inset-0 z-50 print:static print:block" role="dialog" aria-modal="true">
       <div
-        className={`absolute inset-0 bg-gray-950/30 backdrop-blur-[1.5px] transition-opacity duration-200 print:hidden ${
+        className={`sn-velo absolute inset-0 bg-gray-950/30 backdrop-blur-[1.5px] transition-opacity duration-200 print:hidden ${
           abierto ? "opacity-100" : "opacity-0"
         }`}
         onMouseDown={cerrar}
       />
       <aside
-        className={`absolute top-2 right-2 bottom-2 ${ancho} max-w-[calc(100vw-16px)] flex flex-col rounded-2xl bg-white border border-gray-200 shadow-pop overflow-hidden transition-transform duration-300 ease-[cubic-bezier(.2,.85,.25,1)] print:static print:w-full print:max-w-none print:shadow-none print:border-0 print:transform-none ${
+        className={`sn-lateral absolute top-2 right-2 bottom-2 ${ancho} max-w-[calc(100vw-16px)] flex flex-col rounded-2xl bg-white border border-gray-200 shadow-pop overflow-hidden transition-transform duration-300 ease-[cubic-bezier(.2,.85,.25,1)] print:static print:w-full print:max-w-none print:shadow-none print:border-0 print:transform-none ${
           abierto ? "translate-x-0" : "translate-x-[calc(100%+24px)]"
         }`}
       >
@@ -309,7 +309,7 @@ export function Tarjeta({
   acento?: string;
 }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-card px-4 pt-3.5 pb-3 transition-all hover:-translate-y-0.5 hover:shadow-pop">
+    <div className="sn-tarjeta bg-white border border-gray-200 rounded-xl shadow-card px-4 pt-3.5 pb-3 transition-all hover:-translate-y-0.5 hover:shadow-pop">
       <p className="text-[12.5px] text-gray-500 flex items-center gap-2">
         {Icono && (
           <span className={`w-6 h-6 rounded-[7px] flex items-center justify-center ${acento ?? "bg-gray-100 text-gray-500"}`}>
@@ -334,7 +334,7 @@ export function Segmento<T extends string>({
   onChange: (k: T) => void;
 }) {
   return (
-    <div role="radiogroup" className="inline-flex gap-0.5 p-0.5 rounded-lg bg-gray-100">
+    <div role="radiogroup" className="sn-segmento inline-flex gap-0.5 p-0.5 rounded-lg bg-gray-100">
       {opciones.map((o) => (
         <button
           key={o.k}
