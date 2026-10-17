@@ -35,6 +35,7 @@ import { tasaPara, useTasas } from "@/components/Tasas";
 import { Campo, Ventana, inputCls } from "@/components/Ventana";
 import { colorDe, iniciales } from "@/components/Paleta";
 import { useAlClicFuera } from "@/components/useFuera";
+import { useStockVivo } from "@/components/StockVivo";
 
 type ClientRow = {
   id: string;
@@ -68,9 +69,16 @@ type LineItem = {
   price_tier_used: number | null;
   prices?: (number | null)[];
   // solo para mostrar en pantalla (no se guardan en la nota)
-  stock?: number | null;
+  stock?: number | null; // lo que esta nota puede tomar: estante + lo que ya tiene
   supply?: string | null;
+  tomado?: number; // lo que ya se le entrego a esta nota
+  modo?: string; // PARCIAL / ESPERAR (como quiere el cliente que se le entregue)
 };
+
+// lo que el servidor contesta si no alcanza
+type Faltante = { product_id: string; code: string; description: string; pide: number; hay: number; tipo: string };
+type Decision = "PARCIAL" | "ESPERAR" | "QUITAR";
+type Entrega = { product_id: string; code: string; pidio: number; entregado: number; apartado: number; estante: number; modo: string };
 
 type CurrencyMode = "USD" | "COP" | "BS_BINANCE" | "BS_BCV";
 
@@ -126,14 +134,18 @@ function Existencia({ stock, supply, pide }: { stock?: number | null; supply?: s
   const s = Number(stock);
   const falta = pide !== undefined && pide > s;
   if (s <= 0)
-    return <span className="text-[11px] px-1.5 py-px rounded-md bg-red-50 text-red-600 whitespace-nowrap">agotado</span>;
+    return (
+      <span className="text-[11px] px-1.5 py-px rounded-md bg-red-50 text-red-600 whitespace-nowrap">
+        {pide !== undefined ? "se agotó · queda para pedido" : "agotado"}
+      </span>
+    );
   return (
     <span
       className={`text-[11px] px-1.5 py-px rounded-md whitespace-nowrap ${
         falta ? "bg-amber-50 text-amber-800" : s <= 5 ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"
       }`}
     >
-      {falta ? `solo hay ${s}` : `${s} en stock`}
+      {falta ? `solo quedan ${s}` : `${s} en stock`}
     </span>
   );
 }
@@ -144,6 +156,10 @@ function NuevaNotaInner() {
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Producto[]>([]);
+  // estante en vivo de cada repuesto (lo avisa la base de datos al momento)
+  const [vivo, setVivo] = useState<Record<string, number>>({});
+  const [faltantes, setFaltantes] = useState<Faltante[] | null>(null);
+  const [decisiones, setDecisiones] = useState<Record<string, Decision>>({});
   const [activo, setActivo] = useState(0);
   const [showPicker, setShowPicker] = useState(false);
   const [importar, setImportar] = useState<"pdf" | "pegar" | null>(null);
@@ -230,6 +246,18 @@ function NuevaNotaInner() {
         }
       }
     }
+    // lo que esta nota ya tiene tomado: puede llegar hasta estante + eso
+    const { data: ent } = await supabase.rpc("entrega_de_nota", { p_note_id: id });
+    const tom = new Map<string, Entrega>();
+    for (const e of (ent ?? []) as Entrega[]) tom.set(e.product_id, e);
+    for (const it of loaded) {
+      const e = it.product_id ? tom.get(it.product_id) : null;
+      if (e) {
+        it.tomado = Number(e.entregado);
+        it.stock = Number(e.estante) + Number(e.entregado);
+        it.modo = e.modo;
+      }
+    }
     setItems(loaded);
     setQuickClientName(row.quick_client_name ?? "");
     if (row.client_id) {
@@ -300,6 +328,28 @@ function NuevaNotaInner() {
     const v = t === 4 ? p.price_4 : t === 3 ? p.price_3 : t === 2 ? p.price_2 : p.price_1;
     return Number(v ?? p.price_1 ?? 0);
   }
+
+  // ---------- stock en vivo: si otro asesor toma un repuesto, se ve al momento ----------
+  useStockVivo((c) => {
+    setVivo((v) => ({ ...v, [c.product_id]: c.estante }));
+    setItems((prev) => {
+      let cambio = false;
+      const next = prev.map((it) => {
+        if (it.product_id !== c.product_id) return it;
+        const nuevo = c.estante + (it.tomado ?? 0);
+        if (it.stock === nuevo) return it;
+        cambio = true;
+        if (it.supply !== "PEDIDO" && it.quantity <= Number(it.stock ?? 0) && it.quantity > nuevo) {
+          notify.aviso(
+            nuevo <= 0 ? `${it.code_snapshot}: se agotó` : `${it.code_snapshot}: solo quedan ${nuevo}`,
+            "Otro asesor acaba de tomar este repuesto. Al guardar eliges qué hacer."
+          );
+        }
+        return { ...it, stock: nuevo };
+      });
+      return cambio ? next : prev;
+    });
+  });
 
   // Cada busqueda lleva un numero. Si llega la respuesta de una busqueda vieja
   // (porque ya agregaste el producto o seguiste escribiendo), se ignora.
@@ -800,7 +850,7 @@ function NuevaNotaInner() {
       p_discount: discountAmount,
       // lo que solo sirve en pantalla no se manda a la base
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      p_items: items.map(({ prices, stock, supply, ...rest }) => rest),
+      p_items: items.map(({ prices, stock, supply, tomado, modo, ...rest }) => rest),
       p_payment_status: paymentStatus,
       p_due_date: dueDate || null,
     };
@@ -852,14 +902,39 @@ function NuevaNotaInner() {
       return;
     }
 
+    await guardarConDecision({});
+  }
+
+  // guarda la nota en el servidor. Si de algun repuesto no alcanza (porque otro
+  // asesor lo tomo, aunque sea en el mismo segundo), el servidor NO guarda y
+  // dice que falta; el asesor decide y se vuelve a intentar.
+  async function guardarConDecision(dec: Record<string, Decision>, lista: LineItem[] = items) {
+    // quitar las lineas que el asesor decidio sacar
+    const quitar = new Set(Object.entries(dec).filter(([, d]) => d === "QUITAR").map(([k]) => k));
+    const nuevos = quitar.size ? lista.filter((it) => !it.product_id || !quitar.has(it.product_id)) : lista;
+    if (quitar.size) setItems(nuevos);
+    if (nuevos.length === 0) {
+      notify.aviso("La nota quedó sin productos", "No se guardó.");
+      return;
+    }
+    const decServidor: Record<string, string> = {};
+    for (const [k, d] of Object.entries(dec)) {
+      if (d === "QUITAR") continue;
+      // "PARCIAL:50" = decidio viendo 50; si al guardar hay menos, el servidor vuelve a preguntar
+      const visto = faltantes?.find((f) => f.product_id === k)?.hay;
+      decServidor[k] = d === "PARCIAL" && visto !== undefined ? `PARCIAL:${visto}` : d;
+    }
+
     setSaving(true);
-    const payload = buildPayload();
+    const payload = { ...buildPayload(), p_items: nuevos.map(({ prices, stock, supply, tomado, modo, ...rest }) => rest) };
     const snap = JSON.stringify(payload);
     const eraNueva = !currentId;
 
-    const { data, error } = currentId
-      ? await supabase.rpc("update_note", { p_note_id: currentId, ...payload })
-      : await supabase.rpc("create_note", payload);
+    const { data, error } = await supabase.rpc("guardar_nota", {
+      p_note_id: currentId ?? null,
+      ...payload,
+      p_decisiones: decServidor,
+    });
     setSaving(false);
 
     if (error) {
@@ -868,10 +943,38 @@ function NuevaNotaInner() {
       return;
     }
 
-    const row = Array.isArray(data) ? data[0] : data;
-    const id = (row?.id as string) ?? currentId ?? null;
-    const numero = row?.sequence_number ?? savedNoteNumber;
+    const r = data as { estado: string; faltantes?: Faltante[]; id?: string; sequence_number?: number; entregas?: Entrega[] };
+    if (r.estado === "FALTA") {
+      // mostrar la ventana para decidir (con lo que hay AHORA en el servidor)
+      const f = r.faltantes ?? [];
+      setDecisiones(Object.fromEntries(f.map((x) => [x.product_id, (x.hay > 0 ? "PARCIAL" : "ESPERAR") as Decision])));
+      setFaltantes(f);
+      for (const x of f) setVivo((v) => ({ ...v, [x.product_id]: x.hay }));
+      return;
+    }
+    setFaltantes(null);
 
+    const id = r.id ?? currentId ?? null;
+    const numero = r.sequence_number ?? savedNoteNumber;
+
+    // lo que se entrego de verdad
+    const ent = new Map<string, Entrega>();
+    for (const e of r.entregas ?? []) ent.set(e.product_id, e);
+    setItems((prev) =>
+      prev.map((it) => {
+        const e = it.product_id ? ent.get(it.product_id) : null;
+        return e ? { ...it, tomado: Number(e.entregado), stock: Number(e.estante) + Number(e.entregado), modo: e.modo } : it;
+      })
+    );
+    const apartados = (r.entregas ?? []).filter((e) => Number(e.apartado) > 0.005);
+    for (const e of apartados) {
+      notify.aviso(
+        `${e.code}: ${Number(e.entregado)} entregadas · ${Number(e.apartado)} apartadas`,
+        e.modo === "ESPERAR"
+          ? "El cliente espera a que llegue completo. Está en Pedidos → Por pedir."
+          : "Lo que falta está en Pedidos → Por pedir con el nombre del cliente."
+      );
+    }
     savedIdRef.current = id;
     setSavedNoteId(id);
     setSavedNoteNumber(numero ?? null);
@@ -925,6 +1028,84 @@ function NuevaNotaInner() {
           onPick={(p, t) => addProduct(p as Producto, t)}
           onClose={() => setShowPicker(false)}
         />
+      )}
+
+      {faltantes && (
+        <Ventana
+          titulo="No alcanza para todo"
+          subtitulo="Otro asesor puede haber tomado algo hace un momento. Esto es lo que hay ahora:"
+          icono={AlertTriangle}
+          ancho="max-w-xl"
+          onClose={() => setFaltantes(null)}
+          pie={
+            <>
+              <button onClick={() => setFaltantes(null)} className="h-9 px-3 text-[13px] text-gray-600 rounded-lg hover:bg-gray-100">
+                Volver a la nota
+              </button>
+              <button
+                onClick={() => guardarConDecision(decisiones)}
+                disabled={saving}
+                className="h-9 px-4 rounded-lg bg-brand-700 text-white text-[13px] font-medium hover:bg-brand-800 disabled:opacity-50"
+              >
+                Guardar así
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            {faltantes.map((f) => {
+              const d = decisiones[f.product_id];
+              const ops: { k: Decision; t: string; s: string }[] =
+                f.hay > 0
+                  ? [
+                      { k: "PARCIAL", t: `Entregar ${f.hay} y apartar ${f.pide - f.hay}`, s: "Le mandas lo que hay; lo demás va a Pedidos." },
+                      { k: "ESPERAR", t: `Apartar los ${f.pide} y esperar`, s: "No se entrega nada hasta que llegue completo. Las " + f.hay + " quedan para otros." },
+                      { k: "QUITAR", t: "Quitar de la nota", s: "El cliente no lo quiere así." },
+                    ]
+                  : [
+                      { k: "ESPERAR", t: `Dejar los ${f.pide} apartados para pedido`, s: "Se agotó: queda en Pedidos → Por pedir con el nombre del cliente." },
+                      { k: "QUITAR", t: "Quitar de la nota", s: "El cliente no lo quiere esperar." },
+                    ];
+              return (
+                <div key={f.product_id} className="rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="px-3.5 py-2.5 bg-gray-50/70 flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13.5px] text-gray-900 truncate">
+                        <span className="font-mono text-[11.5px] text-gray-500 mr-2">{f.code}</span>
+                        {f.description}
+                      </p>
+                      <p className="text-[12px] text-gray-600">
+                        Pides <b className="font-medium">{f.pide}</b> ·{" "}
+                        {f.hay > 0 ? (
+                          <>
+                            solo quedan <b className="font-medium text-amber-700">{f.hay}</b>
+                          </>
+                        ) : (
+                          <b className="font-medium text-red-600">se agotó</b>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  {ops.map((o) => (
+                    <label key={o.k} className="flex items-start gap-2.5 px-3.5 py-2 border-t border-gray-100 cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="radio"
+                        name={`dec-${f.product_id}`}
+                        checked={d === o.k}
+                        onChange={() => setDecisiones((x) => ({ ...x, [f.product_id]: o.k }))}
+                        className="mt-1 accent-brand-700"
+                      />
+                      <span>
+                        <span className="block text-[13px] text-gray-900">{o.t}</span>
+                        <span className="block text-[11.5px] text-gray-500">{o.s}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </Ventana>
       )}
 
       {/* ---------- encabezado ---------- */}
@@ -1198,7 +1379,7 @@ function NuevaNotaInner() {
                           </span>
                         )}
                       </span>
-                      <Existencia stock={p.stock_quantity} supply={p.supply_type} />
+                      <Existencia stock={vivo[p.id] ?? p.stock_quantity} supply={p.supply_type} />
                       <span className="w-20 shrink-0 text-right text-[13px] font-semibold text-gray-900">
                         ${money(priceOf(p, tier))}
                       </span>
@@ -1274,7 +1455,18 @@ function NuevaNotaInner() {
                         ) : (
                           <span className="text-[11px] px-1.5 py-px rounded-md bg-amber-50 text-amber-800">fuera del catalogo</span>
                         )}
-                        {pocoStock && <span className="text-[11px] text-amber-700">lo que falte queda en Pedidos</span>}
+                        {pocoStock && it.modo === "ESPERAR" ? (
+                          <span className="text-[11px] text-violet-700">el cliente espera a que llegue completo</span>
+                        ) : pocoStock && it.modo === "PARCIAL" && (it.tomado ?? 0) > 0 ? (
+                          <span className="text-[11px] text-amber-700">
+                            {it.tomado} entregadas · {it.quantity - (it.tomado ?? 0)} esperando en Pedidos
+                          </span>
+                        ) : (
+                          pocoStock &&
+                          Number(it.stock) > 0 && (
+                            <span className="text-[11px] text-amber-700">al guardar eliges: entregar {Number(it.stock)} o esperar todo</span>
+                          )
+                        )}
                       </div>
                     </div>
                     <div className="w-[104px] shrink-0 flex items-center justify-center">
@@ -1418,7 +1610,7 @@ function NuevaNotaInner() {
                       >
                         <span className="w-20 shrink-0 font-mono text-[10.5px] text-gray-500 truncate">{h.code}</span>
                         <span className="flex-1 min-w-0 truncate text-[12.5px] text-gray-800">{h.description}</span>
-                        <Existencia stock={h.stock_quantity} supply={h.supply_type} />
+                        <Existencia stock={vivo[h.id] ?? h.stock_quantity} supply={h.supply_type} />
                         <span className="shrink-0 w-16 text-right text-[12px] text-gray-900">${money(priceOf(h, tier))}</span>
                       </button>
                     ))}
