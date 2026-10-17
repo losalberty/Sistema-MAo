@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertOctagon,
@@ -35,6 +35,7 @@ import {
 } from "@/components/ui";
 import { Barra, Campo, Encabezado, Lateral, Segmento, Tarjeta, Ventana, descargarExcel, inputCls } from "@/components/Ventana";
 import { leerFilas } from "@/components/Excel";
+import { useStockVivo } from "@/components/StockVivo";
 
 type StockRow = {
   id: string;
@@ -183,6 +184,36 @@ export default function InventarioPage() {
     const t = setTimeout(cargar, 250);
     return () => clearTimeout(t);
   }, [cargar]);
+
+  // en vivo: si alguien vende o llega mercancia, la fila cambia sola
+  const resumenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useStockVivo((c) => {
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === c.product_id
+          ? {
+              ...r,
+              stock: c.estante,
+              apartado: c.apartado,
+              valor: Math.round(Math.max(c.estante, 0) * r.cost * 100) / 100,
+              estado:
+                r.supply_type === "PEDIDO"
+                  ? "PEDIDO"
+                  : r.min_stock > 0 && c.estante < r.min_stock
+                  ? "REPONER"
+                  : c.estante <= 0
+                  ? "SIN_STOCK"
+                  : "OK",
+            }
+          : r
+      )
+    );
+    if (resumenTimer.current) clearTimeout(resumenTimer.current);
+    resumenTimer.current = setTimeout(async () => {
+      const { data } = await supabase.rpc("stock_summary");
+      if (data) setResumen(data as Resumen);
+    }, 800);
+  });
 
   useEffect(() => {
     setVisibles(POR_PAGINA);
